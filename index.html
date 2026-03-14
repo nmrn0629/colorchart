@@ -96,7 +96,7 @@
     #previewCanvas {
       width: 100%;
       display: block;
-      aspect-ratio: 974 / 1104;
+      aspect-ratio: 1024 / 1536;
     }
 
     .control-panel {
@@ -271,10 +271,10 @@
           <h1>ドーナツ x キャンディ 配色プレビュー</h1>
           <p class="sub">ヴォーエプソン風のシボ感を残して、色組み合わせを確認できます。</p>
         </div>
-        <span class="tag">ベース: 中抜き ドーナツキャンディ</span>
+        <span class="tag">ベース: ステッチドーナツ</span>
       </div>
       <div class="canvas-wrap">
-        <canvas id="previewCanvas" width="974" height="1104"></canvas>
+        <canvas id="previewCanvas" width="1024" height="1536"></canvas>
         <div id="loading" class="loading">画像を読み込み中...</div>
       </div>
     </section>
@@ -299,6 +299,14 @@
         <div class="metal-options">
           <button id="metalSilver" class="metal-btn active" type="button">シルバー</button>
           <button id="metalGold" class="metal-btn" type="button">黄味を抑えたゴールド</button>
+        </div>
+      </div>
+
+      <div class="block">
+        <h2>点線カラー</h2>
+        <div class="metal-options">
+          <button id="stitchWhite" class="metal-btn" type="button">白</button>
+          <button id="stitchBlack" class="metal-btn active" type="button">黒</button>
         </div>
       </div>
 
@@ -354,7 +362,8 @@
       boneColor: COLORS.find((c) => c.name === "ライムイエロー") || COLORS[0],
       dogGroup: "すべて",
       boneGroup: "すべて",
-      metal: "silver"
+      metal: "silver",
+      stitch: "black"
     };
 
     const canvas = document.getElementById("previewCanvas");
@@ -368,15 +377,25 @@
     const boneSwatchesEl = document.getElementById("boneSwatches");
     const metalSilverBtn = document.getElementById("metalSilver");
     const metalGoldBtn = document.getElementById("metalGold");
+    const stitchWhiteBtn = document.getElementById("stitchWhite");
+    const stitchBlackBtn = document.getElementById("stitchBlack");
 
     const baseImage = new Image();
     const offscreen = document.createElement("canvas");
     const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
+    const grainSourceImage = new Image();
+    const grainPatchCanvas = document.createElement("canvas");
+    const grainPatchCtx = grainPatchCanvas.getContext("2d", { willReadFrequently: true });
 
     let baseData = null;
     let dogMask = null;
     let boneMask = null;
     let metalMask = null;
+    let grainPatchData = null;
+    let grainPatchWidth = 0;
+    let grainPatchHeight = 0;
+    let grainMap = null;
+    let grainEmbossMap = null;
     let imageReady = false;
 
     function clamp(v, min = 0, max = 255) {
@@ -445,8 +464,82 @@
 
     function updateSummary() {
       const metalName = state.metal === "silver" ? "シルバー" : "黄味を抑えたゴールド";
+      const stitchName = state.stitch === "white" ? "白" : "黒";
       summaryEl.textContent =
-        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」。`;
+        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」 / 点線「${stitchName}」。`;
+    }
+
+    function positiveMod(value, mod) {
+      const n = value % mod;
+      return n < 0 ? n + mod : n;
+    }
+
+    function loadLeatherPatch() {
+      grainSourceImage.src = "ブラウン系.jpg";
+      grainSourceImage.onload = () => {
+        const srcW = grainSourceImage.naturalWidth;
+        const srcH = grainSourceImage.naturalHeight;
+        const sx = Math.floor(srcW * 0.06);
+        const sy = Math.floor(srcH * 0.06);
+        const sw = Math.max(120, Math.floor(srcW * 0.20));
+        const sh = Math.max(120, Math.floor(srcH * 0.20));
+
+        grainPatchWidth = 200;
+        grainPatchHeight = 200;
+        grainPatchCanvas.width = grainPatchWidth;
+        grainPatchCanvas.height = grainPatchHeight;
+        grainPatchCtx.drawImage(grainSourceImage, sx, sy, sw, sh, 0, 0, grainPatchWidth, grainPatchHeight);
+        grainPatchData = grainPatchCtx.getImageData(0, 0, grainPatchWidth, grainPatchHeight).data;
+
+        if (imageReady) {
+          buildLeatherGrainMap(offscreen.width, offscreen.height);
+          render();
+        }
+      };
+    }
+
+    function buildLeatherGrainMap(width, height) {
+      grainMap = new Float32Array(width * height);
+      grainEmbossMap = new Float32Array(width * height);
+
+      const hasPatch = !!(grainPatchData && grainPatchWidth > 0 && grainPatchHeight > 0);
+
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+
+          if (hasPatch) {
+            const sx1 = positiveMod((x * 0.95 + y * 0.19) | 0, grainPatchWidth);
+            const sy1 = positiveMod((y * 0.92 - x * 0.13) | 0, grainPatchHeight);
+            const sx2 = positiveMod((x * 1.43 - y * 0.22) | 0, grainPatchWidth);
+            const sy2 = positiveMod((y * 1.31 + x * 0.17) | 0, grainPatchHeight);
+
+            const i1 = (sy1 * grainPatchWidth + sx1) * 4;
+            const i2 = (sy2 * grainPatchWidth + sx2) * 4;
+            const lum1 = (grainPatchData[i1] * 0.22 + grainPatchData[i1 + 1] * 0.61 + grainPatchData[i1 + 2] * 0.17) / 255;
+            const lum2 = (grainPatchData[i2] * 0.22 + grainPatchData[i2 + 1] * 0.61 + grainPatchData[i2 + 2] * 0.17) / 255;
+
+            const center1 = lum1 - 0.5;
+            const center2 = lum2 - 0.5;
+            const pebble = (1 - Math.abs(center1 * 2)) - 0.5;
+            grainMap[idx] = center1 * 0.92 + center2 * 0.48 + pebble * 0.44;
+          } else {
+            const n1 = Math.sin(x * 0.081 + y * 0.053);
+            const n2 = Math.cos(x * 0.132 - y * 0.119);
+            const n3 = Math.sin((x + y) * 0.27);
+            grainMap[idx] = n1 * 0.23 + n2 * 0.17 + n3 * 0.09;
+          }
+        }
+      }
+
+      for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+          const idx = y * width + x;
+          const gx = grainMap[idx + 1] - grainMap[idx - 1];
+          const gy = grainMap[idx + width] - grainMap[idx - width];
+          grainEmbossMap[idx] = gx * 0.72 + gy * 0.54;
+        }
+      }
     }
 
     function classifyMasks(imageData, width, height) {
@@ -528,6 +621,15 @@
       return a + (b - a) * t;
     }
 
+    function candyHalfWidthByT(t) {
+      if (t < 0.12) return lerp(0.028, 0.102, t / 0.12);
+      if (t < 0.28) return lerp(0.102, 0.058, (t - 0.12) / 0.16);
+      if (t < 0.50) return lerp(0.058, 0.094, (t - 0.28) / 0.22);
+      if (t < 0.72) return lerp(0.094, 0.058, (t - 0.50) / 0.22);
+      if (t < 0.88) return lerp(0.058, 0.102, (t - 0.72) / 0.16);
+      return lerp(0.102, 0.028, (t - 0.88) / 0.12);
+    }
+
     function applyDonutCandyMasks(width, height) {
       dogMask.fill(0);
       boneMask.fill(0);
@@ -555,20 +657,7 @@
           let inCandy = false;
           if (ny >= 0.43 && ny <= 0.84) {
             const t = (ny - 0.43) / 0.41;
-            let halfWidth = 0.04;
-            if (t < 0.12) {
-              halfWidth = lerp(0.028, 0.102, t / 0.12);
-            } else if (t < 0.28) {
-              halfWidth = lerp(0.102, 0.058, (t - 0.12) / 0.16);
-            } else if (t < 0.50) {
-              halfWidth = lerp(0.058, 0.094, (t - 0.28) / 0.22);
-            } else if (t < 0.72) {
-              halfWidth = lerp(0.094, 0.058, (t - 0.50) / 0.22);
-            } else if (t < 0.88) {
-              halfWidth = lerp(0.058, 0.102, (t - 0.72) / 0.16);
-            } else {
-              halfWidth = lerp(0.102, 0.028, (t - 0.88) / 0.12);
-            }
+            const halfWidth = candyHalfWidthByT(t);
             const wobble = 1 + 0.06 * Math.sin((ny * 38) + (nx * 20));
             inCandy = Math.abs(nx - 0.70) < halfWidth * wobble;
           }
@@ -601,18 +690,18 @@
       }
     }
 
-    function leatherTone(base, target, x, y) {
+    function leatherTone(base, target, idx) {
       const lum = (0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b) / 255;
       const spread = (Math.max(base.r, base.g, base.b) - Math.min(base.r, base.g, base.b)) / 255;
-      const grain =
-        Math.sin(x * 0.22 + y * 0.15) * 0.045 +
-        Math.cos(x * 0.13 - y * 0.17) * 0.03 +
-        Math.sin((x + y) * 0.53) * 0.02;
-      const factor = (0.42 + lum * 0.72 + spread * 0.28) * (0.95 + grain);
+      const grain = grainMap ? grainMap[idx] : 0;
+      const emboss = grainEmbossMap ? grainEmbossMap[idx] : 0;
+      const factor = 0.55 + lum * 0.33 + spread * 0.17 + grain * 0.42;
+      const lift = grain * 18;
+      const bump = emboss * 16;
       return {
-        r: clamp(target.r * factor),
-        g: clamp(target.g * factor),
-        b: clamp(target.b * factor)
+        r: clamp(target.r * factor + lift * 0.50 + bump),
+        g: clamp(target.g * factor + lift * 0.35 + bump * 0.85),
+        b: clamp(target.b * factor - lift * 0.24 - bump * 0.70)
       };
     }
 
@@ -639,6 +728,72 @@
       return { r: clamp(r), g: clamp(g), b: clamp(b) };
     }
 
+    function stitchStrokeColor() {
+      return state.stitch === "white" ? "rgba(249, 249, 246, 0.98)" : "rgba(32, 32, 32, 0.96)";
+    }
+
+    function drawDonutStitches(width, height) {
+      const c = ctx;
+      c.save();
+      c.strokeStyle = stitchStrokeColor();
+      c.lineCap = "round";
+      c.lineJoin = "round";
+      c.lineWidth = Math.max(2.4, width * 0.0032);
+      c.setLineDash([width * 0.008, width * 0.007]);
+
+      const cx = width * 0.332;
+      const cy = height * 0.620;
+      c.beginPath();
+      c.ellipse(cx, cy, width * 0.145, height * 0.097, 0, 0, Math.PI * 2);
+      c.stroke();
+
+      c.beginPath();
+      c.ellipse(cx, cy, width * 0.052, height * 0.034, 0, 0, Math.PI * 2);
+      c.stroke();
+      c.restore();
+    }
+
+    function drawCandyStitches(width, height) {
+      const c = ctx;
+      const xCenter = width * 0.698;
+      const yStart = height * 0.435;
+      const yEnd = height * 0.838;
+      const steps = 84;
+
+      c.save();
+      c.strokeStyle = stitchStrokeColor();
+      c.lineCap = "round";
+      c.lineJoin = "round";
+      c.lineWidth = Math.max(2.2, width * 0.0030);
+      c.setLineDash([width * 0.0074, width * 0.0068]);
+      c.beginPath();
+
+      for (let step = 0; step <= steps; step += 1) {
+        const t = step / steps;
+        const y = lerp(yStart, yEnd, t);
+        const half = candyHalfWidthByT(t) * width * 0.80;
+        const x = xCenter + half;
+        if (step === 0) c.moveTo(x, y);
+        else c.lineTo(x, y);
+      }
+
+      for (let step = steps; step >= 0; step -= 1) {
+        const t = step / steps;
+        const y = lerp(yStart, yEnd, t);
+        const half = candyHalfWidthByT(t) * width * 0.80;
+        const x = xCenter - half;
+        c.lineTo(x, y);
+      }
+      c.closePath();
+      c.stroke();
+      c.restore();
+    }
+
+    function drawStitches(width, height) {
+      drawDonutStitches(width, height);
+      drawCandyStitches(width, height);
+    }
+
     function render() {
       if (!imageReady || !baseData) return;
 
@@ -652,15 +807,13 @@
 
       for (let idx = 0; idx < dogMask.length; idx += 1) {
         const i = idx * 4;
-        const x = idx % width;
-        const y = (idx / width) | 0;
         const base = { r: src[i], g: src[i + 1], b: src[i + 2] };
         let result = { ...base };
 
         if (dogMask[idx]) {
-          result = leatherTone(base, dogTarget, x, y);
+          result = leatherTone(base, dogTarget, idx);
         } else if (boneMask[idx]) {
-          result = leatherTone(base, boneTarget, x, y);
+          result = leatherTone(base, boneTarget, idx);
         } else if (metalMask[idx]) {
           result = metalTone(base, state.metal);
         }
@@ -672,6 +825,7 @@
       }
 
       ctx.putImageData(out, 0, 0);
+      drawStitches(width, height);
     }
 
     function initControls() {
@@ -720,12 +874,28 @@
         render();
       });
 
+      stitchWhiteBtn.addEventListener("click", () => {
+        state.stitch = "white";
+        stitchWhiteBtn.classList.add("active");
+        stitchBlackBtn.classList.remove("active");
+        updateSummary();
+        render();
+      });
+
+      stitchBlackBtn.addEventListener("click", () => {
+        state.stitch = "black";
+        stitchBlackBtn.classList.add("active");
+        stitchWhiteBtn.classList.remove("active");
+        updateSummary();
+        render();
+      });
+
       rerenderSwatches();
       updateSummary();
     }
 
     function initImage() {
-      baseImage.src = "中抜き　ドーナツキャンディ.jpg";
+      baseImage.src = "ステッチドーナツ.jpg";
       baseImage.onload = () => {
         offscreen.width = baseImage.naturalWidth;
         offscreen.height = baseImage.naturalHeight;
@@ -734,6 +904,7 @@
         offCtx.drawImage(baseImage, 0, 0);
         baseData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
         classifyMasks(baseData, offscreen.width, offscreen.height);
+        buildLeatherGrainMap(offscreen.width, offscreen.height);
         imageReady = true;
         loadingEl.style.display = "none";
         render();
@@ -744,6 +915,7 @@
     }
 
     initControls();
+    loadLeatherPatch();
     initImage();
   </script>
 </body>
