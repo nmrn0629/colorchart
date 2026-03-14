@@ -96,7 +96,7 @@
     #previewCanvas {
       width: 100%;
       display: block;
-      aspect-ratio: 1080 / 1225;
+      aspect-ratio: 974 / 1104;
     }
 
     .control-panel {
@@ -268,13 +268,13 @@
     <section class="panel preview-panel">
       <div class="preview-header">
         <div>
-          <h1>犬チャーム x 骨チャーム 配色プレビュー</h1>
+          <h1>ドーナツ x キャンディ 配色プレビュー</h1>
           <p class="sub">ヴォーエプソン風のシボ感を残して、色組み合わせを確認できます。</p>
         </div>
-        <span class="tag">骨外周ステッチ: 白固定</span>
+        <span class="tag">ベース: 中抜き ドーナツキャンディ</span>
       </div>
       <div class="canvas-wrap">
-        <canvas id="previewCanvas" width="1080" height="1225"></canvas>
+        <canvas id="previewCanvas" width="974" height="1104"></canvas>
         <div id="loading" class="loading">画像を読み込み中...</div>
       </div>
     </section>
@@ -283,12 +283,12 @@
       <div class="block">
         <h2>カラー選択</h2>
         <div class="selector-row">
-          <label for="dogGroup">犬チャーム / グループ</label>
+          <label for="dogGroup">ドーナツ / グループ</label>
           <select id="dogGroup"></select>
         </div>
         <div class="swatches" id="dogSwatches"></div>
         <div class="selector-row" style="margin-top: 10px;">
-          <label for="boneGroup">骨チャーム / グループ</label>
+          <label for="boneGroup">キャンディ / グループ</label>
           <select id="boneGroup"></select>
         </div>
         <div class="swatches" id="boneSwatches"></div>
@@ -446,8 +446,7 @@
     function updateSummary() {
       const metalName = state.metal === "silver" ? "シルバー" : "黄味を抑えたゴールド";
       summaryEl.textContent =
-        `現在の組み合わせ: 犬「${state.dogColor.name}」 / 骨「${state.boneColor.name}」 / 金具「${metalName}」。` +
-        " 骨チャーム外周の白ステッチは常時表示です。";
+        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」。`;
     }
 
     function classifyMasks(imageData, width, height) {
@@ -455,6 +454,8 @@
       dogMask = new Uint8Array(width * height);
       boneMask = new Uint8Array(width * height);
       metalMask = new Uint8Array(width * height);
+      let dogCount = 0;
+      let boneCount = 0;
 
       for (let y = 0; y < height; y += 1) {
         for (let x = 0; x < width; x += 1) {
@@ -503,17 +504,82 @@
 
           if (isDog) {
             dogMask[idx] = 1;
+            dogCount += 1;
           } else if (isBone) {
             boneMask[idx] = 1;
+            boneCount += 1;
           } else if (isMetal) {
             metalMask[idx] = 1;
           }
         }
       }
 
+      const area = width * height;
+      if (dogCount < area * 0.01 && boneCount < area * 0.015) {
+        applyDonutCandyMasks(width, height);
+      }
+
       smoothMask(dogMask, width, height, 2);
       smoothMask(boneMask, width, height, 2);
       smoothMask(metalMask, width, height, 2);
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function applyDonutCandyMasks(width, height) {
+      dogMask.fill(0);
+      boneMask.fill(0);
+
+      for (let y = 0; y < height; y += 1) {
+        const ny = y / height;
+        for (let x = 0; x < width; x += 1) {
+          const nx = x / width;
+          const idx = y * width + x;
+
+          const dx = (nx - 0.33) / 0.182;
+          const dy = (ny - 0.62) / 0.16;
+          const radius = Math.sqrt(dx * dx + dy * dy);
+          const angle = Math.atan2(dy, dx);
+          const outerWave = 1 + 0.04 * Math.sin(angle * 6);
+          const innerWave = 0.28 + 0.02 * Math.sin((angle + 0.8) * 4);
+          const inDonut =
+            nx > 0.10 &&
+            nx < 0.57 &&
+            ny > 0.41 &&
+            ny < 0.83 &&
+            radius < outerWave &&
+            radius > innerWave;
+
+          let inCandy = false;
+          if (ny >= 0.43 && ny <= 0.84) {
+            const t = (ny - 0.43) / 0.41;
+            let halfWidth = 0.04;
+            if (t < 0.12) {
+              halfWidth = lerp(0.028, 0.102, t / 0.12);
+            } else if (t < 0.28) {
+              halfWidth = lerp(0.102, 0.058, (t - 0.12) / 0.16);
+            } else if (t < 0.50) {
+              halfWidth = lerp(0.058, 0.094, (t - 0.28) / 0.22);
+            } else if (t < 0.72) {
+              halfWidth = lerp(0.094, 0.058, (t - 0.50) / 0.22);
+            } else if (t < 0.88) {
+              halfWidth = lerp(0.058, 0.102, (t - 0.72) / 0.16);
+            } else {
+              halfWidth = lerp(0.102, 0.028, (t - 0.88) / 0.12);
+            }
+            const wobble = 1 + 0.06 * Math.sin((ny * 38) + (nx * 20));
+            inCandy = Math.abs(nx - 0.70) < halfWidth * wobble;
+          }
+
+          if (inDonut) {
+            dogMask[idx] = 1;
+          } else if (inCandy) {
+            boneMask[idx] = 1;
+          }
+        }
+      }
     }
 
     function smoothMask(mask, width, height, rounds) {
@@ -535,10 +601,14 @@
       }
     }
 
-    function leatherTone(base, target) {
+    function leatherTone(base, target, x, y) {
       const lum = (0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b) / 255;
       const spread = (Math.max(base.r, base.g, base.b) - Math.min(base.r, base.g, base.b)) / 255;
-      const factor = 0.38 + lum * 0.9 + spread * 0.32;
+      const grain =
+        Math.sin(x * 0.22 + y * 0.15) * 0.045 +
+        Math.cos(x * 0.13 - y * 0.17) * 0.03 +
+        Math.sin((x + y) * 0.53) * 0.02;
+      const factor = (0.42 + lum * 0.72 + spread * 0.28) * (0.95 + grain);
       return {
         r: clamp(target.r * factor),
         g: clamp(target.g * factor),
@@ -569,32 +639,6 @@
       return { r: clamp(r), g: clamp(g), b: clamp(b) };
     }
 
-    function drawBoneStitch(width, height) {
-      const c = ctx;
-      c.save();
-      c.lineCap = "round";
-      c.lineJoin = "round";
-      c.lineWidth = Math.max(2, width * 0.0034);
-      c.setLineDash([width * 0.008, width * 0.006]);
-      c.strokeStyle = "rgba(248,248,245,0.95)";
-      c.beginPath();
-      c.moveTo(width * 0.60, height * 0.43);
-      c.bezierCurveTo(width * 0.69, height * 0.41, width * 0.74, height * 0.45, width * 0.75, height * 0.50);
-      c.bezierCurveTo(width * 0.77, height * 0.62, width * 0.69, height * 0.72, width * 0.66, height * 0.79);
-      c.bezierCurveTo(width * 0.63, height * 0.86, width * 0.66, height * 0.93, width * 0.62, height * 0.96);
-      c.bezierCurveTo(width * 0.57, height * 0.99, width * 0.49, height * 0.96, width * 0.45, height * 0.90);
-      c.bezierCurveTo(width * 0.40, height * 0.82, width * 0.39, height * 0.72, width * 0.43, height * 0.66);
-      c.bezierCurveTo(width * 0.47, height * 0.59, width * 0.48, height * 0.53, width * 0.52, height * 0.49);
-      c.bezierCurveTo(width * 0.54, height * 0.46, width * 0.57, height * 0.44, width * 0.60, height * 0.43);
-      c.stroke();
-
-      c.lineWidth = Math.max(1, width * 0.0012);
-      c.setLineDash([]);
-      c.strokeStyle = "rgba(100, 104, 102, 0.18)";
-      c.stroke();
-      c.restore();
-    }
-
     function render() {
       if (!imageReady || !baseData) return;
 
@@ -608,19 +652,15 @@
 
       for (let idx = 0; idx < dogMask.length; idx += 1) {
         const i = idx * 4;
+        const x = idx % width;
+        const y = (idx / width) | 0;
         const base = { r: src[i], g: src[i + 1], b: src[i + 2] };
         let result = { ...base };
 
         if (dogMask[idx]) {
-          result = leatherTone(base, dogTarget);
+          result = leatherTone(base, dogTarget, x, y);
         } else if (boneMask[idx]) {
-          const hsv = rgbToHsv(base.r, base.g, base.b);
-          const stitchLike = hsv.s < 0.18 && hsv.v > 0.58;
-          if (stitchLike) {
-            result = { r: 246, g: 246, b: 240 };
-          } else {
-            result = leatherTone(base, boneTarget);
-          }
+          result = leatherTone(base, boneTarget, x, y);
         } else if (metalMask[idx]) {
           result = metalTone(base, state.metal);
         }
@@ -632,7 +672,6 @@
       }
 
       ctx.putImageData(out, 0, 0);
-      drawBoneStitch(width, height);
     }
 
     function initControls() {
@@ -686,7 +725,7 @@
     }
 
     function initImage() {
-      baseImage.src = "トイプー骨　見本.jpg";
+      baseImage.src = "中抜き　ドーナツキャンディ.jpg";
       baseImage.onload = () => {
         offscreen.width = baseImage.naturalWidth;
         offscreen.height = baseImage.naturalHeight;
