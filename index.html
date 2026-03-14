@@ -391,6 +391,8 @@
     let dogMask = null;
     let boneMask = null;
     let metalMask = null;
+    let stitchDogMask = null;
+    let stitchBoneMask = null;
     let grainPatchData = null;
     let grainPatchWidth = 0;
     let grainPatchHeight = 0;
@@ -547,6 +549,8 @@
       dogMask = new Uint8Array(width * height);
       boneMask = new Uint8Array(width * height);
       metalMask = new Uint8Array(width * height);
+      stitchDogMask = new Uint8Array(width * height);
+      stitchBoneMask = new Uint8Array(width * height);
       let dogCount = 0;
       let boneCount = 0;
 
@@ -618,6 +622,7 @@
         smoothMask(boneMask, width, height, 2);
       }
       smoothMask(metalMask, width, height, 2);
+      buildInternalStitchMasks(src, width, height);
     }
 
     function lerp(a, b, t) {
@@ -859,6 +864,62 @@
       return true;
     }
 
+    function buildInternalStitchMasks(src, width, height) {
+      stitchDogMask.fill(0);
+      stitchBoneMask.fill(0);
+
+      for (let y = 0; y < height; y += 1) {
+        const ny = (y + 0.5) / height;
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+          if (!dogMask[idx] && !boneMask[idx]) {
+            continue;
+          }
+
+          const i = idx * 4;
+          const r = src[i];
+          const g = src[i + 1];
+          const b = src[i + 2];
+          const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          const spread = Math.max(r, g, b) - Math.min(r, g, b);
+          const inkLike = (lum < 176 && spread < 46) || (lum < 204 && spread < 22);
+          if (!inkLike) {
+            continue;
+          }
+
+          const nx = (x + 0.5) / width;
+
+          if (dogMask[idx]) {
+            const dx = (nx - 0.332) / 0.172;
+            const dy = (ny - 0.620) / 0.154;
+            const radius = Math.sqrt(dx * dx + dy * dy);
+            const nearOuterStitch = Math.abs(radius - 0.905) < 0.045;
+            const nearInnerStitch = Math.abs(radius - 0.445) < 0.038;
+            if (
+              nx > 0.14 &&
+              nx < 0.54 &&
+              ny > 0.46 &&
+              ny < 0.79 &&
+              (nearOuterStitch || nearInnerStitch)
+            ) {
+              stitchDogMask[idx] = 1;
+            }
+          } else if (boneMask[idx] && ny >= 0.455 && ny <= 0.825) {
+            const t = (ny - 0.455) / 0.37;
+            if (t >= 0 && t <= 1) {
+              const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.012);
+              const stitchOffset = Math.max(0, halfWidth - 0.021);
+              const edgeDistance = Math.abs(Math.abs(nx - 0.698) - stitchOffset);
+              const tolerance = 0.009 + halfWidth * 0.08;
+              if (edgeDistance <= tolerance) {
+                stitchBoneMask[idx] = 1;
+              }
+            }
+          }
+        }
+      }
+    }
+
     function smoothMask(mask, width, height, rounds) {
       for (let round = 0; round < rounds; round += 1) {
         const copy = mask.slice();
@@ -916,70 +977,14 @@
       return { r: clamp(r), g: clamp(g), b: clamp(b) };
     }
 
-    function stitchStrokeColor() {
-      return state.stitch === "white" ? "rgba(249, 249, 246, 0.98)" : "rgba(32, 32, 32, 0.96)";
-    }
-
-    function drawDonutStitches(width, height) {
-      const c = ctx;
-      c.save();
-      c.strokeStyle = stitchStrokeColor();
-      c.lineCap = "round";
-      c.lineJoin = "round";
-      c.lineWidth = Math.max(2.4, width * 0.0032);
-      c.setLineDash([width * 0.008, width * 0.007]);
-
-      const cx = width * 0.332;
-      const cy = height * 0.620;
-      c.beginPath();
-      c.ellipse(cx, cy, width * 0.145, height * 0.097, 0, 0, Math.PI * 2);
-      c.stroke();
-
-      c.beginPath();
-      c.ellipse(cx, cy, width * 0.052, height * 0.034, 0, 0, Math.PI * 2);
-      c.stroke();
-      c.restore();
-    }
-
-    function drawCandyStitches(width, height) {
-      const c = ctx;
-      const xCenter = width * 0.698;
-      const yStart = height * 0.435;
-      const yEnd = height * 0.838;
-      const steps = 84;
-
-      c.save();
-      c.strokeStyle = stitchStrokeColor();
-      c.lineCap = "round";
-      c.lineJoin = "round";
-      c.lineWidth = Math.max(2.2, width * 0.0030);
-      c.setLineDash([width * 0.0074, width * 0.0068]);
-      c.beginPath();
-
-      for (let step = 0; step <= steps; step += 1) {
-        const t = step / steps;
-        const y = lerp(yStart, yEnd, t);
-        const half = candyHalfWidthByT(t) * width * 0.80;
-        const x = xCenter + half;
-        if (step === 0) c.moveTo(x, y);
-        else c.lineTo(x, y);
+    function stitchPixelTone(base) {
+      const lum = (0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b) / 255;
+      if (state.stitch === "white") {
+        const tone = 236 + lum * 20;
+        return { r: clamp(tone + 3), g: clamp(tone + 3), b: clamp(tone) };
       }
-
-      for (let step = steps; step >= 0; step -= 1) {
-        const t = step / steps;
-        const y = lerp(yStart, yEnd, t);
-        const half = candyHalfWidthByT(t) * width * 0.80;
-        const x = xCenter - half;
-        c.lineTo(x, y);
-      }
-      c.closePath();
-      c.stroke();
-      c.restore();
-    }
-
-    function drawStitches(width, height) {
-      drawDonutStitches(width, height);
-      drawCandyStitches(width, height);
+      const tone = 18 + lum * 26;
+      return { r: clamp(tone), g: clamp(tone), b: clamp(tone + 1) };
     }
 
     function render() {
@@ -1006,6 +1011,10 @@
           result = metalTone(base, state.metal);
         }
 
+        if (stitchDogMask[idx] || stitchBoneMask[idx]) {
+          result = stitchPixelTone(base);
+        }
+
         dst[i] = result.r;
         dst[i + 1] = result.g;
         dst[i + 2] = result.b;
@@ -1013,7 +1022,6 @@
       }
 
       ctx.putImageData(out, 0, 0);
-      drawStitches(width, height);
     }
 
     function initControls() {
