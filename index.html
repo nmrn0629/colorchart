@@ -608,12 +608,15 @@
       }
 
       const area = width * height;
+      let usedLineFittedMask = false;
       if (dogCount < area * 0.01 && boneCount < area * 0.015) {
-        applyDonutCandyMasks(width, height);
+        usedLineFittedMask = applyDonutCandyMasks(width, height, src);
       }
 
-      smoothMask(dogMask, width, height, 2);
-      smoothMask(boneMask, width, height, 2);
+      if (!usedLineFittedMask) {
+        smoothMask(dogMask, width, height, 2);
+        smoothMask(boneMask, width, height, 2);
+      }
       smoothMask(metalMask, width, height, 2);
     }
 
@@ -630,36 +633,177 @@
       return lerp(0.102, 0.028, (t - 0.88) / 0.12);
     }
 
-    function applyDonutCandyMasks(width, height) {
-      dogMask.fill(0);
-      boneMask.fill(0);
+    function buildLineBarrier(src, width, height) {
+      const barrier = new Uint8Array(width * height);
+      for (let idx = 0; idx < barrier.length; idx += 1) {
+        const i = idx * 4;
+        const r = src[i];
+        const g = src[i + 1];
+        const b = src[i + 2];
+        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const spread = Math.max(r, g, b) - Math.min(r, g, b);
+        const darkInk = lum < 162 && spread < 44;
+        const antialiasInk = lum < 195 && spread < 26 && r < 206 && g < 206 && b < 206;
+        if (darkInk || antialiasInk) {
+          barrier[idx] = 1;
+        }
+      }
+      return barrier;
+    }
 
+    function markOutsideArea(barrier, width, height) {
+      const outside = new Uint8Array(width * height);
+      const queue = new Int32Array(width * height);
+      let head = 0;
+      let tail = 0;
+
+      function enqueue(idx) {
+        if (!outside[idx] && !barrier[idx]) {
+          outside[idx] = 1;
+          queue[tail] = idx;
+          tail += 1;
+        }
+      }
+
+      for (let x = 0; x < width; x += 1) {
+        enqueue(x);
+        enqueue((height - 1) * width + x);
+      }
+      for (let y = 1; y < height - 1; y += 1) {
+        enqueue(y * width);
+        enqueue(y * width + (width - 1));
+      }
+
+      while (head < tail) {
+        const idx = queue[head];
+        head += 1;
+        const x = idx % width;
+        const y = (idx / width) | 0;
+
+        if (x > 0) enqueue(idx - 1);
+        if (x < width - 1) enqueue(idx + 1);
+        if (y > 0) enqueue(idx - width);
+        if (y < height - 1) enqueue(idx + width);
+      }
+
+      return outside;
+    }
+
+    function findEnclosedSeed(anchorX, anchorY, width, height, barrier, outside) {
+      const cx = Math.round(anchorX * width);
+      const cy = Math.round(anchorY * height);
+      const maxRadius = Math.ceil(Math.max(width, height) * 0.09);
+
+      for (let radius = 0; radius <= maxRadius; radius += 1) {
+        const minX = Math.max(1, cx - radius);
+        const maxX = Math.min(width - 2, cx + radius);
+        const minY = Math.max(1, cy - radius);
+        const maxY = Math.min(height - 2, cy + radius);
+
+        for (let x = minX; x <= maxX; x += 1) {
+          const topIdx = minY * width + x;
+          if (!barrier[topIdx] && !outside[topIdx]) return topIdx;
+          const bottomIdx = maxY * width + x;
+          if (!barrier[bottomIdx] && !outside[bottomIdx]) return bottomIdx;
+        }
+        for (let y = minY + 1; y < maxY; y += 1) {
+          const leftIdx = y * width + minX;
+          if (!barrier[leftIdx] && !outside[leftIdx]) return leftIdx;
+          const rightIdx = y * width + maxX;
+          if (!barrier[rightIdx] && !outside[rightIdx]) return rightIdx;
+        }
+      }
+      return -1;
+    }
+
+    function floodFillRegion(seedIdx, width, height, barrier, outside, targetMask) {
+      if (seedIdx < 0 || barrier[seedIdx] || outside[seedIdx]) return 0;
+
+      const queue = new Int32Array(width * height);
+      let head = 0;
+      let tail = 0;
+      let count = 0;
+
+      queue[tail] = seedIdx;
+      tail += 1;
+      outside[seedIdx] = 1;
+
+      while (head < tail) {
+        const idx = queue[head];
+        head += 1;
+        targetMask[idx] = 1;
+        count += 1;
+
+        const x = idx % width;
+        const y = (idx / width) | 0;
+
+        if (x > 0) {
+          const left = idx - 1;
+          if (!barrier[left] && !outside[left]) {
+            outside[left] = 1;
+            queue[tail] = left;
+            tail += 1;
+          }
+        }
+        if (x < width - 1) {
+          const right = idx + 1;
+          if (!barrier[right] && !outside[right]) {
+            outside[right] = 1;
+            queue[tail] = right;
+            tail += 1;
+          }
+        }
+        if (y > 0) {
+          const up = idx - width;
+          if (!barrier[up] && !outside[up]) {
+            outside[up] = 1;
+            queue[tail] = up;
+            tail += 1;
+          }
+        }
+        if (y < height - 1) {
+          const down = idx + width;
+          if (!barrier[down] && !outside[down]) {
+            outside[down] = 1;
+            queue[tail] = down;
+            tail += 1;
+          }
+        }
+      }
+
+      return count;
+    }
+
+    function applyApproxDonutCandyMasks(width, height, barrier) {
       for (let y = 0; y < height; y += 1) {
-        const ny = y / height;
+        const ny = (y + 0.5) / height;
         for (let x = 0; x < width; x += 1) {
-          const nx = x / width;
+          const nx = (x + 0.5) / width;
           const idx = y * width + x;
 
-          const dx = (nx - 0.33) / 0.182;
-          const dy = (ny - 0.62) / 0.16;
+          if (barrier[idx]) {
+            continue;
+          }
+
+          const dx = (nx - 0.332) / 0.172;
+          const dy = (ny - 0.620) / 0.154;
           const radius = Math.sqrt(dx * dx + dy * dy);
           const angle = Math.atan2(dy, dx);
-          const outerWave = 1 + 0.04 * Math.sin(angle * 6);
-          const innerWave = 0.28 + 0.02 * Math.sin((angle + 0.8) * 4);
+          const outerWave = 0.965 + 0.018 * Math.sin(angle * 6);
+          const innerWave = 0.372 + 0.014 * Math.sin((angle + 0.8) * 4);
           const inDonut =
-            nx > 0.10 &&
-            nx < 0.57 &&
-            ny > 0.41 &&
-            ny < 0.83 &&
+            nx > 0.13 &&
+            nx < 0.55 &&
+            ny > 0.45 &&
+            ny < 0.80 &&
             radius < outerWave &&
             radius > innerWave;
 
           let inCandy = false;
-          if (ny >= 0.43 && ny <= 0.84) {
-            const t = (ny - 0.43) / 0.41;
-            const halfWidth = candyHalfWidthByT(t);
-            const wobble = 1 + 0.06 * Math.sin((ny * 38) + (nx * 20));
-            inCandy = Math.abs(nx - 0.70) < halfWidth * wobble;
+          if (ny >= 0.45 && ny <= 0.83) {
+            const t = (ny - 0.45) / 0.38;
+            const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.010);
+            inCandy = Math.abs(nx - 0.698) < halfWidth;
           }
 
           if (inDonut) {
@@ -669,6 +813,50 @@
           }
         }
       }
+    }
+
+    function insetMaskFromBarrier(mask, barrier, width, height, passes) {
+      for (let pass = 0; pass < passes; pass += 1) {
+        const copy = mask.slice();
+        for (let y = 1; y < height - 1; y += 1) {
+          for (let x = 1; x < width - 1; x += 1) {
+            const idx = y * width + x;
+            if (!copy[idx]) continue;
+            if (
+              barrier[idx] ||
+              barrier[idx - 1] ||
+              barrier[idx + 1] ||
+              barrier[idx - width] ||
+              barrier[idx + width]
+            ) {
+              mask[idx] = 0;
+            }
+          }
+        }
+      }
+    }
+
+    function applyDonutCandyMasks(width, height, src) {
+      dogMask.fill(0);
+      boneMask.fill(0);
+      const barrier = buildLineBarrier(src, width, height);
+      const outside = markOutsideArea(barrier, width, height);
+
+      const donutSeed = findEnclosedSeed(0.434, 0.620, width, height, barrier, outside);
+      const candySeed = findEnclosedSeed(0.698, 0.640, width, height, barrier, outside);
+      const donutSize = floodFillRegion(donutSeed, width, height, barrier, outside, dogMask);
+      const candySize = floodFillRegion(candySeed, width, height, barrier, outside, boneMask);
+
+      const area = width * height;
+      if (donutSize < area * 0.01 || candySize < area * 0.01) {
+        dogMask.fill(0);
+        boneMask.fill(0);
+        applyApproxDonutCandyMasks(width, height, barrier);
+      }
+
+      insetMaskFromBarrier(dogMask, barrier, width, height, 2);
+      insetMaskFromBarrier(boneMask, barrier, width, height, 2);
+      return true;
     }
 
     function smoothMask(mask, width, height, rounds) {
