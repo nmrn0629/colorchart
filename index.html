@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>チャーム配色プレビュー</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap");
+
+    :root {
+      --ink: #263241;
+      --paper: #f6f2e8;
+      --panel: rgba(255, 255, 255, 0.86);
+      --line: rgba(38, 50, 65, 0.16);
+      --accent: #c67a4b;
+      --shadow: 0 20px 46px rgba(28, 37, 48, 0.14);
+      --radius-lg: 22px;
+      --radius-md: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "M PLUS Rounded 1c", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(130% 75% at 10% 0%, rgba(255, 221, 171, 0.58), transparent 65%),
+        radial-gradient(120% 90% at 100% 15%, rgba(171, 213, 227, 0.44), transparent 60%),
+        linear-gradient(135deg, #eee5d6 0%, #f7f4ee 42%, #e9f0f3 100%);
+      padding: 24px;
+    }
+
+    .layout {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(5px);
+    }
+
+    .preview-panel {
+      padding: 20px;
+    }
+
+    .preview-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+      letter-spacing: 0.03em;
+    }
+
+    .sub {
+      margin: 6px 0 0;
+      font-size: 0.92rem;
+      opacity: 0.85;
+    }
+
+    .tag {
+      font-size: 0.75rem;
+      border: 1px solid rgba(38, 50, 65, 0.25);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.75);
+      white-space: nowrap;
+    }
+
+    .canvas-wrap {
+      width: 100%;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: #f9f9f7;
+      border: 1px solid rgba(38, 50, 65, 0.12);
+      position: relative;
+    }
+
+    #previewCanvas {
+      width: 100%;
+      display: block;
+      aspect-ratio: 1080 / 1225;
+    }
+
+    .control-panel {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .block {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    .block h2 {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+      letter-spacing: 0.05em;
+      font-weight: 700;
+    }
+
+    .selector-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 9px;
+    }
+
+    .selector-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .selector-row label {
+      font-size: 0.86rem;
+      opacity: 0.88;
+    }
+
+    select {
+      width: 150px;
+      border-radius: 10px;
+      border: 1px solid rgba(38, 50, 65, 0.22);
+      padding: 6px 10px;
+      font: inherit;
+      background: white;
+      color: #1e2630;
+    }
+
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .swatch {
+      border: none;
+      border-radius: 12px;
+      aspect-ratio: 1 / 1;
+      position: relative;
+      cursor: pointer;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.65),
+        0 2px 6px rgba(0, 0, 0, 0.16);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .swatch:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.75),
+        0 6px 12px rgba(0, 0, 0, 0.18);
+    }
+
+    .swatch.active::after {
+      content: "";
+      position: absolute;
+      inset: 5px;
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      border-radius: 9px;
+    }
+
+    .metal-options {
+      display: flex;
+      gap: 8px;
+    }
+
+    .metal-btn {
+      flex: 1;
+      border: 1px solid rgba(38, 50, 65, 0.22);
+      border-radius: 10px;
+      background: white;
+      padding: 8px 10px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.88rem;
+      transition: all 0.16s ease;
+    }
+
+    .metal-btn.active {
+      border-color: rgba(38, 50, 65, 0.58);
+      box-shadow: inset 0 0 0 1px rgba(38, 50, 65, 0.32);
+      background: #fdfbf8;
+      transform: translateY(-1px);
+    }
+
+    .summary {
+      font-size: 0.84rem;
+      line-height: 1.65;
+      margin: 0;
+      background: rgba(244, 241, 231, 0.95);
+      border-radius: 10px;
+      padding: 10px 12px;
+      border: 1px solid rgba(38, 50, 65, 0.14);
+    }
+
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .charts img {
+      width: 100%;
+      display: block;
+      border-radius: 10px;
+      border: 1px solid rgba(38, 50, 65, 0.15);
+    }
+
+    .loading {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      font-size: 0.92rem;
+      letter-spacing: 0.04em;
+      color: #2f3f55;
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    @media (max-width: 980px) {
+      body {
+        padding: 14px;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .swatches {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      .swatches {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+
+      select {
+        width: 132px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="layout">
+    <section class="panel preview-panel">
+      <div class="preview-header">
+        <div>
+          <h1>犬チャーム x 骨チャーム 配色プレビュー</h1>
+          <p class="sub">ヴォーエプソン風のシボ感を残して、色組み合わせを確認できます。</p>
+        </div>
+        <span class="tag">骨外周ステッチ: 白固定</span>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="previewCanvas" width="1080" height="1225"></canvas>
+        <div id="loading" class="loading">画像を読み込み中...</div>
+      </div>
+    </section>
+
+    <section class="panel control-panel">
+      <div class="block">
+        <h2>カラー選択</h2>
+        <div class="selector-row">
+          <label for="dogGroup">犬チャーム / グループ</label>
+          <select id="dogGroup"></select>
+        </div>
+        <div class="swatches" id="dogSwatches"></div>
+        <div class="selector-row" style="margin-top: 10px;">
+          <label for="boneGroup">骨チャーム / グループ</label>
+          <select id="boneGroup"></select>
+        </div>
+        <div class="swatches" id="boneSwatches"></div>
+      </div>
+
+      <div class="block">
+        <h2>金具カラー</h2>
+        <div class="metal-options">
+          <button id="metalSilver" class="metal-btn active" type="button">シルバー</button>
+          <button id="metalGold" class="metal-btn" type="button">黄味を抑えたゴールド</button>
+        </div>
+      </div>
+
+      <p id="summary" class="summary"></p>
+
+      <div class="block">
+        <h2>カラーチャート（参照）</h2>
+        <div class="charts">
+          <img src="イエロー系.jpg" alt="イエロー系カラーチャート">
+          <img src="ブラウン系.jpg" alt="ブラウン系カラーチャート">
+          <img src="ブルー系.jpg" alt="ブルー系カラーチャート">
+          <img src="レッド系.jpg" alt="レッド系カラーチャート">
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const COLORS = [
+      { name: "ゴールド", group: "イエロー/オレンジ", hex: "#b88853" },
+      { name: "オレンジ", group: "イエロー/オレンジ", hex: "#d27e37" },
+      { name: "ライムイエロー", group: "イエロー/オレンジ", hex: "#dad049" },
+      { name: "ペールイエロー", group: "イエロー/オレンジ", hex: "#d9d5a9" },
+      { name: "ブリック", group: "イエロー/オレンジ", hex: "#8e5950" },
+      { name: "ピスタチオ", group: "イエロー/オレンジ", hex: "#9ab085" },
+
+      { name: "ブラック", group: "ベーシック", hex: "#202930" },
+      { name: "グレージュ", group: "ベーシック", hex: "#70655c" },
+      { name: "ブラウン", group: "ベーシック", hex: "#93624e" },
+      { name: "チャコールグレー", group: "ベーシック", hex: "#4b4d50" },
+      { name: "アイボリー", group: "ベーシック", hex: "#dfddd6" },
+      { name: "エトープ", group: "ベーシック", hex: "#b5a58f" },
+
+      { name: "ライトブルー", group: "ブルー", hex: "#90cecf" },
+      { name: "シェルブルー", group: "ブルー", hex: "#70b7cc" },
+      { name: "ミストブルー", group: "ブルー", hex: "#78b5ca" },
+      { name: "アイスグレー", group: "ブルー", hex: "#c4c8c9" },
+      { name: "ロイヤルブルー", group: "ブルー", hex: "#4f66d4" },
+      { name: "ネイビー", group: "ブルー", hex: "#30405e" },
+
+      { name: "ピンク", group: "ピンク/レッド", hex: "#dd7084" },
+      { name: "レッド", group: "ピンク/レッド", hex: "#ca5054" },
+      { name: "ローズピンク", group: "ピンク/レッド", hex: "#a65782" },
+      { name: "パープル", group: "ピンク/レッド", hex: "#8960a0" },
+      { name: "ペールピンク", group: "ピンク/レッド", hex: "#d9c7d7" },
+      { name: "コーラルピンク", group: "ピンク/レッド", hex: "#dd9d86" }
+    ];
+
+    const GROUPS = ["すべて", ...new Set(COLORS.map((c) => c.group))];
+
+    const state = {
+      dogColor: COLORS.find((c) => c.name === "ネイビー") || COLORS[0],
+      boneColor: COLORS.find((c) => c.name === "ライムイエロー") || COLORS[0],
+      dogGroup: "すべて",
+      boneGroup: "すべて",
+      metal: "silver"
+    };
+
+    const canvas = document.getElementById("previewCanvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const loadingEl = document.getElementById("loading");
+    const summaryEl = document.getElementById("summary");
+
+    const dogGroupEl = document.getElementById("dogGroup");
+    const boneGroupEl = document.getElementById("boneGroup");
+    const dogSwatchesEl = document.getElementById("dogSwatches");
+    const boneSwatchesEl = document.getElementById("boneSwatches");
+    const metalSilverBtn = document.getElementById("metalSilver");
+    const metalGoldBtn = document.getElementById("metalGold");
+
+    const baseImage = new Image();
+    const offscreen = document.createElement("canvas");
+    const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
+
+    let baseData = null;
+    let dogMask = null;
+    let boneMask = null;
+    let metalMask = null;
+    let imageReady = false;
+
+    function clamp(v, min = 0, max = 255) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function hexToRgb(hex) {
+      const normalized = hex.replace("#", "");
+      const bigint = Number.parseInt(normalized, 16);
+      return {
+        r: (bigint >> 16) & 255,
+        g: (bigint >> 8) & 255,
+        b: bigint & 255
+      };
+    }
+
+    function rgbToHsv(r, g, b) {
+      const nr = r / 255;
+      const ng = g / 255;
+      const nb = b / 255;
+      const max = Math.max(nr, ng, nb);
+      const min = Math.min(nr, ng, nb);
+      const d = max - min;
+      let h = 0;
+      if (d) {
+        if (max === nr) h = ((ng - nb) / d) % 6;
+        else if (max === ng) h = (nb - nr) / d + 2;
+        else h = (nr - ng) / d + 4;
+      }
+      h = Math.round(h * 60);
+      if (h < 0) h += 360;
+      const s = max === 0 ? 0 : d / max;
+      const v = max;
+      return { h, s, v };
+    }
+
+    function buildGroupOptions(selectEl) {
+      selectEl.innerHTML = "";
+      for (const group of GROUPS) {
+        const option = document.createElement("option");
+        option.value = group;
+        option.textContent = group;
+        selectEl.appendChild(option);
+      }
+    }
+
+    function colorsInGroup(group) {
+      if (group === "すべて") return COLORS;
+      return COLORS.filter((color) => color.group === group);
+    }
+
+    function buildSwatches(container, group, selectedName, onClick) {
+      container.innerHTML = "";
+      const rows = colorsInGroup(group);
+      for (const color of rows) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "swatch" + (color.name === selectedName ? " active" : "");
+        button.style.background = color.hex;
+        button.title = color.name;
+        button.setAttribute("aria-label", color.name);
+        button.addEventListener("click", () => onClick(color));
+        container.appendChild(button);
+      }
+    }
+
+    function updateSummary() {
+      const metalName = state.metal === "silver" ? "シルバー" : "黄味を抑えたゴールド";
+      summaryEl.textContent =
+        `現在の組み合わせ: 犬「${state.dogColor.name}」 / 骨「${state.boneColor.name}」 / 金具「${metalName}」。` +
+        " 骨チャーム外周の白ステッチは常時表示です。";
+    }
+
+    function classifyMasks(imageData, width, height) {
+      const src = imageData.data;
+      dogMask = new Uint8Array(width * height);
+      boneMask = new Uint8Array(width * height);
+      metalMask = new Uint8Array(width * height);
+
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const i = (y * width + x) * 4;
+          const r = src[i];
+          const g = src[i + 1];
+          const b = src[i + 2];
+          const hsv = rgbToHsv(r, g, b);
+          const satSpread = Math.max(r, g, b) - Math.min(r, g, b);
+
+          const inMainArea = x > width * 0.16 && x < width * 0.84 && y > height * 0.12 && y < height * 0.95;
+          const isBackground = r > 222 && g > 222 && b > 222 && satSpread < 23;
+
+          if (!inMainArea || isBackground) {
+            continue;
+          }
+
+          const idx = y * width + x;
+
+          const isDog =
+            y > height * 0.18 &&
+            y < height * 0.68 &&
+            x > width * 0.17 &&
+            x < width * 0.76 &&
+            hsv.v < 0.42 &&
+            hsv.s > 0.12 &&
+            satSpread > 15;
+
+          const isBone =
+            y > height * 0.32 &&
+            x > width * 0.26 &&
+            x < width * 0.8 &&
+            hsv.h > 35 &&
+            hsv.h < 76 &&
+            hsv.s > 0.2 &&
+            hsv.v > 0.36;
+
+          const isMetal =
+            y < height * 0.54 &&
+            x > width * 0.24 &&
+            x < width * 0.72 &&
+            hsv.s < 0.35 &&
+            hsv.v > 0.28 &&
+            hsv.v < 0.93 &&
+            satSpread < 80;
+
+          if (isDog) {
+            dogMask[idx] = 1;
+          } else if (isBone) {
+            boneMask[idx] = 1;
+          } else if (isMetal) {
+            metalMask[idx] = 1;
+          }
+        }
+      }
+
+      smoothMask(dogMask, width, height, 2);
+      smoothMask(boneMask, width, height, 2);
+      smoothMask(metalMask, width, height, 2);
+    }
+
+    function smoothMask(mask, width, height, rounds) {
+      for (let round = 0; round < rounds; round += 1) {
+        const copy = mask.slice();
+        for (let y = 1; y < height - 1; y += 1) {
+          for (let x = 1; x < width - 1; x += 1) {
+            const idx = y * width + x;
+            let sum = 0;
+            for (let oy = -1; oy <= 1; oy += 1) {
+              for (let ox = -1; ox <= 1; ox += 1) {
+                sum += copy[(y + oy) * width + (x + ox)];
+              }
+            }
+            if (sum >= 5) mask[idx] = 1;
+            if (sum <= 2) mask[idx] = 0;
+          }
+        }
+      }
+    }
+
+    function leatherTone(base, target) {
+      const lum = (0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b) / 255;
+      const spread = (Math.max(base.r, base.g, base.b) - Math.min(base.r, base.g, base.b)) / 255;
+      const factor = 0.38 + lum * 0.9 + spread * 0.32;
+      return {
+        r: clamp(target.r * factor),
+        g: clamp(target.g * factor),
+        b: clamp(target.b * factor)
+      };
+    }
+
+    function metalTone(base, mode) {
+      const lum = (0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b) / 255;
+      const highlight = mode === "silver"
+        ? { r: 243, g: 246, b: 252 }
+        : { r: 236, g: 223, b: 192 };
+      const shadow = mode === "silver"
+        ? { r: 109, g: 118, b: 130 }
+        : { r: 117, g: 100, b: 72 };
+      const mix = 0.18 + lum * 0.82;
+      let r = shadow.r * (1 - mix) + highlight.r * mix;
+      let g = shadow.g * (1 - mix) + highlight.g * mix;
+      let b = shadow.b * (1 - mix) + highlight.b * mix;
+
+      if (mode === "gold") {
+        const mute = 0.14;
+        const gray = (r + g + b) / 3;
+        r = r * (1 - mute) + gray * mute;
+        g = g * (1 - mute) + gray * mute;
+        b = b * (1 - mute) + gray * mute;
+      }
+      return { r: clamp(r), g: clamp(g), b: clamp(b) };
+    }
+
+    function drawBoneStitch(width, height) {
+      const c = ctx;
+      c.save();
+      c.lineCap = "round";
+      c.lineJoin = "round";
+      c.lineWidth = Math.max(2, width * 0.0034);
+      c.setLineDash([width * 0.008, width * 0.006]);
+      c.strokeStyle = "rgba(248,248,245,0.95)";
+      c.beginPath();
+      c.moveTo(width * 0.60, height * 0.43);
+      c.bezierCurveTo(width * 0.69, height * 0.41, width * 0.74, height * 0.45, width * 0.75, height * 0.50);
+      c.bezierCurveTo(width * 0.77, height * 0.62, width * 0.69, height * 0.72, width * 0.66, height * 0.79);
+      c.bezierCurveTo(width * 0.63, height * 0.86, width * 0.66, height * 0.93, width * 0.62, height * 0.96);
+      c.bezierCurveTo(width * 0.57, height * 0.99, width * 0.49, height * 0.96, width * 0.45, height * 0.90);
+      c.bezierCurveTo(width * 0.40, height * 0.82, width * 0.39, height * 0.72, width * 0.43, height * 0.66);
+      c.bezierCurveTo(width * 0.47, height * 0.59, width * 0.48, height * 0.53, width * 0.52, height * 0.49);
+      c.bezierCurveTo(width * 0.54, height * 0.46, width * 0.57, height * 0.44, width * 0.60, height * 0.43);
+      c.stroke();
+
+      c.lineWidth = Math.max(1, width * 0.0012);
+      c.setLineDash([]);
+      c.strokeStyle = "rgba(100, 104, 102, 0.18)";
+      c.stroke();
+      c.restore();
+    }
+
+    function render() {
+      if (!imageReady || !baseData) return;
+
+      const width = offscreen.width;
+      const height = offscreen.height;
+      const src = baseData.data;
+      const out = new ImageData(width, height);
+      const dst = out.data;
+      const dogTarget = hexToRgb(state.dogColor.hex);
+      const boneTarget = hexToRgb(state.boneColor.hex);
+
+      for (let idx = 0; idx < dogMask.length; idx += 1) {
+        const i = idx * 4;
+        const base = { r: src[i], g: src[i + 1], b: src[i + 2] };
+        let result = { ...base };
+
+        if (dogMask[idx]) {
+          result = leatherTone(base, dogTarget);
+        } else if (boneMask[idx]) {
+          const hsv = rgbToHsv(base.r, base.g, base.b);
+          const stitchLike = hsv.s < 0.18 && hsv.v > 0.58;
+          if (stitchLike) {
+            result = { r: 246, g: 246, b: 240 };
+          } else {
+            result = leatherTone(base, boneTarget);
+          }
+        } else if (metalMask[idx]) {
+          result = metalTone(base, state.metal);
+        }
+
+        dst[i] = result.r;
+        dst[i + 1] = result.g;
+        dst[i + 2] = result.b;
+        dst[i + 3] = src[i + 3];
+      }
+
+      ctx.putImageData(out, 0, 0);
+      drawBoneStitch(width, height);
+    }
+
+    function initControls() {
+      buildGroupOptions(dogGroupEl);
+      buildGroupOptions(boneGroupEl);
+      dogGroupEl.value = state.dogGroup;
+      boneGroupEl.value = state.boneGroup;
+
+      function rerenderSwatches() {
+        buildSwatches(dogSwatchesEl, state.dogGroup, state.dogColor.name, (color) => {
+          state.dogColor = color;
+          rerenderSwatches();
+          updateSummary();
+          render();
+        });
+        buildSwatches(boneSwatchesEl, state.boneGroup, state.boneColor.name, (color) => {
+          state.boneColor = color;
+          rerenderSwatches();
+          updateSummary();
+          render();
+        });
+      }
+
+      dogGroupEl.addEventListener("change", () => {
+        state.dogGroup = dogGroupEl.value;
+        rerenderSwatches();
+      });
+      boneGroupEl.addEventListener("change", () => {
+        state.boneGroup = boneGroupEl.value;
+        rerenderSwatches();
+      });
+
+      metalSilverBtn.addEventListener("click", () => {
+        state.metal = "silver";
+        metalSilverBtn.classList.add("active");
+        metalGoldBtn.classList.remove("active");
+        updateSummary();
+        render();
+      });
+
+      metalGoldBtn.addEventListener("click", () => {
+        state.metal = "gold";
+        metalGoldBtn.classList.add("active");
+        metalSilverBtn.classList.remove("active");
+        updateSummary();
+        render();
+      });
+
+      rerenderSwatches();
+      updateSummary();
+    }
+
+    function initImage() {
+      baseImage.src = "トイプー骨　見本.jpg";
+      baseImage.onload = () => {
+        offscreen.width = baseImage.naturalWidth;
+        offscreen.height = baseImage.naturalHeight;
+        canvas.width = baseImage.naturalWidth;
+        canvas.height = baseImage.naturalHeight;
+        offCtx.drawImage(baseImage, 0, 0);
+        baseData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+        classifyMasks(baseData, offscreen.width, offscreen.height);
+        imageReady = true;
+        loadingEl.style.display = "none";
+        render();
+      };
+      baseImage.onerror = () => {
+        loadingEl.textContent = "画像の読み込みに失敗しました。ファイル名をご確認ください。";
+      };
+    }
+
+    initControls();
+    initImage();
+  </script>
+</body>
+</html>
