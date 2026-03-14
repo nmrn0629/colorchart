@@ -386,6 +386,8 @@
     const grainSourceImage = new Image();
     const grainPatchCanvas = document.createElement("canvas");
     const grainPatchCtx = grainPatchCanvas.getContext("2d", { willReadFrequently: true });
+    const silverRingImage = new Image();
+    const goldRingImage = new Image();
 
     let baseData = null;
     let dogMask = null;
@@ -398,6 +400,9 @@
     let grainPatchHeight = 0;
     let grainMap = null;
     let grainEmbossMap = null;
+    let silverRingAsset = null;
+    let goldRingAsset = null;
+    let metalBounds = null;
     let imageReady = false;
 
     function clamp(v, min = 0, max = 255) {
@@ -544,6 +549,121 @@
       }
     }
 
+    function computeMaskBounds(mask, width, height) {
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+          if (!mask[idx]) continue;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+
+      if (maxX < minX || maxY < minY) return null;
+      return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+    }
+
+    function extractKeyRingAsset(image) {
+      const workCanvas = document.createElement("canvas");
+      const workCtx = workCanvas.getContext("2d", { willReadFrequently: true });
+      workCanvas.width = image.naturalWidth;
+      workCanvas.height = image.naturalHeight;
+      workCtx.drawImage(image, 0, 0);
+      const img = workCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
+      const data = img.data;
+
+      const corners = [
+        [1, 1],
+        [workCanvas.width - 2, 1],
+        [1, workCanvas.height - 2],
+        [workCanvas.width - 2, workCanvas.height - 2]
+      ];
+      let bgR = 0;
+      let bgG = 0;
+      let bgB = 0;
+      for (const [cx, cy] of corners) {
+        const ci = (cy * workCanvas.width + cx) * 4;
+        bgR += data[ci];
+        bgG += data[ci + 1];
+        bgB += data[ci + 2];
+      }
+      bgR /= corners.length;
+      bgG /= corners.length;
+      bgB /= corners.length;
+
+      let minX = workCanvas.width;
+      let minY = workCanvas.height;
+      let maxX = -1;
+      let maxY = -1;
+
+      for (let y = 0; y < workCanvas.height; y += 1) {
+        for (let x = 0; x < workCanvas.width; x += 1) {
+          const i = (y * workCanvas.width + x) * 4;
+          const dr = data[i] - bgR;
+          const dg = data[i + 1] - bgG;
+          const db = data[i + 2] - bgB;
+          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+
+          if (dist < 12) {
+            data[i + 3] = 0;
+          } else if (dist < 28) {
+            data[i + 3] = Math.round((dist - 12) / 16 * 255);
+          } else {
+            data[i + 3] = 255;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      workCtx.putImageData(img, 0, 0);
+
+      if (maxX < minX || maxY < minY) return null;
+
+      const pad = 4;
+      const sx = Math.max(0, minX - pad);
+      const sy = Math.max(0, minY - pad);
+      const sw = Math.min(workCanvas.width - sx, maxX - minX + 1 + pad * 2);
+      const sh = Math.min(workCanvas.height - sy, maxY - minY + 1 + pad * 2);
+
+      const out = document.createElement("canvas");
+      const outCtx = out.getContext("2d");
+      out.width = sw;
+      out.height = sh;
+      outCtx.drawImage(workCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+      return out;
+    }
+
+    function loadKeyRingAssets() {
+      silverRingImage.src = "シルバーキーリング.jpg";
+      goldRingImage.src = "ゴールドキーリング.jpg";
+
+      silverRingImage.onload = () => {
+        silverRingAsset = extractKeyRingAsset(silverRingImage);
+        if (imageReady) render();
+      };
+      silverRingImage.onerror = () => {
+        silverRingAsset = null;
+        if (imageReady) render();
+      };
+      goldRingImage.onload = () => {
+        goldRingAsset = extractKeyRingAsset(goldRingImage);
+        if (imageReady) render();
+      };
+      goldRingImage.onerror = () => {
+        goldRingAsset = null;
+        if (imageReady) render();
+      };
+    }
+
     function classifyMasks(imageData, width, height) {
       const src = imageData.data;
       dogMask = new Uint8Array(width * height);
@@ -622,6 +742,7 @@
         smoothMask(boneMask, width, height, 2);
       }
       smoothMask(metalMask, width, height, 2);
+      metalBounds = computeMaskBounds(metalMask, width, height);
       buildInternalStitchMasks(src, width, height);
     }
 
@@ -864,79 +985,134 @@
       return true;
     }
 
+    function isStitchLikePixel(src, width, height, x, y, relaxed = false) {
+      const idx = y * width + x;
+      const i = idx * 4;
+      const r = src[i];
+      const g = src[i + 1];
+      const b = src[i + 2];
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const spread = Math.max(r, g, b) - Math.min(r, g, b);
+      const neutralLimit = relaxed ? 72 : 56;
+      const lowLum = relaxed ? 26 : 34;
+      const highLum = relaxed ? 246 : 242;
+      if (spread > neutralLimit || lum < lowLum || lum > highLum) {
+        return false;
+      }
+      if (x <= 0 || x >= width - 1 || y <= 0 || y >= height - 1) {
+        return true;
+      }
+
+      const left = (y * width + (x - 1)) * 4;
+      const right = (y * width + (x + 1)) * 4;
+      const up = ((y - 1) * width + x) * 4;
+      const down = ((y + 1) * width + x) * 4;
+      const lumLeft = 0.2126 * src[left] + 0.7152 * src[left + 1] + 0.0722 * src[left + 2];
+      const lumRight = 0.2126 * src[right] + 0.7152 * src[right + 1] + 0.0722 * src[right + 2];
+      const lumUp = 0.2126 * src[up] + 0.7152 * src[up + 1] + 0.0722 * src[up + 2];
+      const lumDown = 0.2126 * src[down] + 0.7152 * src[down + 1] + 0.0722 * src[down + 2];
+      const local = (lumLeft + lumRight + lumUp + lumDown) / 4;
+      const contrast = Math.abs(lum - local);
+      return contrast > (relaxed ? 3.4 : 6.2);
+    }
+
     function buildInternalStitchMasks(src, width, height) {
       stitchDogMask.fill(0);
       stitchBoneMask.fill(0);
-      let dogStitchCount = 0;
-      let boneStitchCount = 0;
+      let dogCount = 0;
+      let boneCount = 0;
 
       for (let y = 0; y < height; y += 1) {
         const ny = (y + 0.5) / height;
         for (let x = 0; x < width; x += 1) {
           const idx = y * width + x;
-          const i = idx * 4;
-          const r = src[i];
-          const g = src[i + 1];
-          const b = src[i + 2];
-          const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          const spread = Math.max(r, g, b) - Math.min(r, g, b);
-          const inkLike = lum < 226 && spread < 46;
-          if (!inkLike) {
-            continue;
-          }
-
           const nx = (x + 0.5) / width;
-          const dx = (nx - 0.332) / 0.172;
-          const dy = (ny - 0.620) / 0.154;
-          const radius = Math.sqrt(dx * dx + dy * dy);
-          const inDonutWindow = nx > 0.13 && nx < 0.55 && ny > 0.45 && ny < 0.80;
-          const nearOuterStitch = Math.abs(radius - 0.875) < 0.072;
-          const nearInnerStitch = Math.abs(radius - 0.440) < 0.060;
-          if (inDonutWindow && (nearOuterStitch || nearInnerStitch)) {
-            stitchDogMask[idx] = 1;
-            dogStitchCount += 1;
-            continue;
+          if (dogMask[idx]) {
+            const dx = (nx - 0.332) / 0.172;
+            const dy = (ny - 0.620) / 0.154;
+            const radius = Math.sqrt(dx * dx + dy * dy);
+            const inDonutWindow = nx > 0.14 && nx < 0.54 && ny > 0.46 && ny < 0.79;
+            const nearOuterStitch = Math.abs(radius - 0.875) < 0.048;
+            const nearInnerStitch = Math.abs(radius - 0.440) < 0.040;
+            if (inDonutWindow && (nearOuterStitch || nearInnerStitch) && isStitchLikePixel(src, width, height, x, y, false)) {
+              stitchDogMask[idx] = 1;
+              dogCount += 1;
+              continue;
+            }
           }
 
-          if (ny >= 0.445 && ny <= 0.835 && nx > 0.58 && nx < 0.82) {
-            const t = (ny - 0.445) / 0.39;
+          if (boneMask[idx] && ny >= 0.45 && ny <= 0.83 && nx > 0.60 && nx < 0.80) {
+            const t = (ny - 0.45) / 0.38;
             if (t >= 0 && t <= 1) {
-              const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.79 - 0.006);
+              const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.010);
               const stitchOffset = Math.max(0, halfWidth - 0.020);
               const edgeDistance = Math.abs(Math.abs(nx - 0.698) - stitchOffset);
-              const tolerance = 0.014 + halfWidth * 0.08;
-              if (edgeDistance <= tolerance) {
+              const tolerance = 0.010 + halfWidth * 0.06;
+              if (edgeDistance <= tolerance && isStitchLikePixel(src, width, height, x, y, false)) {
                 stitchBoneMask[idx] = 1;
-                boneStitchCount += 1;
+                boneCount += 1;
               }
             }
           }
         }
       }
 
-      if (dogStitchCount < 80 || boneStitchCount < 80) {
-        for (let idx = 0; idx < stitchDogMask.length; idx += 1) {
-          if (dogMask[idx] && !stitchDogMask[idx]) {
-            const i = idx * 4;
-            const r = src[i];
-            const g = src[i + 1];
-            const b = src[i + 2];
-            const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-            const spread = Math.max(r, g, b) - Math.min(r, g, b);
-            if (lum < 200 && spread < 54) {
-              stitchDogMask[idx] = 1;
+      if (dogCount < 120 || boneCount < 80) {
+        for (let y = 0; y < height; y += 1) {
+          const ny = (y + 0.5) / height;
+          for (let x = 0; x < width; x += 1) {
+            const idx = y * width + x;
+            const nx = (x + 0.5) / width;
+
+            if (dogMask[idx] && !stitchDogMask[idx] && dogCount < 120) {
+              const dx = (nx - 0.332) / 0.172;
+              const dy = (ny - 0.620) / 0.154;
+              const radius = Math.sqrt(dx * dx + dy * dy);
+              const inDonutWindow = nx > 0.14 && nx < 0.54 && ny > 0.46 && ny < 0.79;
+              const nearOuterStitch = Math.abs(radius - 0.875) < 0.058;
+              const nearInnerStitch = Math.abs(radius - 0.440) < 0.050;
+              if (inDonutWindow && (nearOuterStitch || nearInnerStitch) && isStitchLikePixel(src, width, height, x, y, true)) {
+                stitchDogMask[idx] = 1;
+                dogCount += 1;
+              }
+            }
+
+            if (boneMask[idx] && !stitchBoneMask[idx] && boneCount < 80 && ny >= 0.45 && ny <= 0.83 && nx > 0.60 && nx < 0.80) {
+              const t = (ny - 0.45) / 0.38;
+              if (t >= 0 && t <= 1) {
+                const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.010);
+                const stitchOffset = Math.max(0, halfWidth - 0.020);
+                const edgeDistance = Math.abs(Math.abs(nx - 0.698) - stitchOffset);
+                const tolerance = 0.012 + halfWidth * 0.08;
+                if (edgeDistance <= tolerance && isStitchLikePixel(src, width, height, x, y, true)) {
+                  stitchBoneMask[idx] = 1;
+                  boneCount += 1;
+                }
+              }
             }
           }
-          if (boneMask[idx] && !stitchBoneMask[idx]) {
-            const i = idx * 4;
-            const r = src[i];
-            const g = src[i + 1];
-            const b = src[i + 2];
-            const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-            const spread = Math.max(r, g, b) - Math.min(r, g, b);
-            if (lum < 200 && spread < 54) {
-              stitchBoneMask[idx] = 1;
+        }
+      }
+
+      removeIsolatedStitchPixels(stitchDogMask, width, height);
+      removeIsolatedStitchPixels(stitchBoneMask, width, height);
+    }
+
+    function removeIsolatedStitchPixels(mask, width, height) {
+      const copy = mask.slice();
+      for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+          const idx = y * width + x;
+          if (!copy[idx]) continue;
+          let neighbors = 0;
+          for (let oy = -1; oy <= 1; oy += 1) {
+            for (let ox = -1; ox <= 1; ox += 1) {
+              if (ox === 0 && oy === 0) continue;
+              neighbors += copy[(y + oy) * width + (x + ox)];
             }
+          }
+          if (neighbors <= 1) {
+            mask[idx] = 0;
           }
         }
       }
@@ -999,6 +1175,26 @@
       return { r: clamp(r), g: clamp(g), b: clamp(b) };
     }
 
+    function drawSelectedKeyRing(width, height) {
+      if (!metalBounds) return;
+      const asset = state.metal === "silver" ? silverRingAsset : goldRingAsset;
+      if (!asset) return;
+
+      const padX = Math.max(1, Math.round(width * 0.004));
+      const padY = Math.max(1, Math.round(height * 0.003));
+      const rawX = metalBounds.x - padX;
+      const rawY = metalBounds.y - padY;
+      const rawW = metalBounds.w + padX * 2;
+      const rawH = metalBounds.h + padY * 2;
+      const targetX = Math.max(0, rawX);
+      const targetY = Math.max(0, rawY);
+      const targetW = Math.min(width - targetX, rawW - (targetX - rawX));
+      const targetH = Math.min(height - targetY, rawH - (targetY - rawY));
+      if (targetW <= 0 || targetH <= 0) return;
+
+      ctx.drawImage(asset, targetX, targetY, targetW, targetH);
+    }
+
     function stitchPixelTone(base) {
       const lum = (0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b) / 255;
       if (state.stitch === "white") {
@@ -1019,6 +1215,7 @@
       const dst = out.data;
       const dogTarget = hexToRgb(state.dogColor.hex);
       const boneTarget = hexToRgb(state.boneColor.hex);
+      const hasRingAsset = state.metal === "silver" ? !!silverRingAsset : !!goldRingAsset;
 
       for (let idx = 0; idx < dogMask.length; idx += 1) {
         const i = idx * 4;
@@ -1030,7 +1227,7 @@
         } else if (boneMask[idx]) {
           result = leatherTone(base, boneTarget, idx);
         } else if (metalMask[idx]) {
-          result = metalTone(base, state.metal);
+          result = hasRingAsset ? { r: 236, g: 236, b: 236 } : metalTone(base, state.metal);
         }
 
         if (stitchDogMask[idx] || stitchBoneMask[idx]) {
@@ -1044,6 +1241,9 @@
       }
 
       ctx.putImageData(out, 0, 0);
+      if (hasRingAsset) {
+        drawSelectedKeyRing(width, height);
+      }
     }
 
     function initControls() {
@@ -1134,6 +1334,7 @@
 
     initControls();
     loadLeatherPatch();
+    loadKeyRingAssets();
     initImage();
   </script>
 </body>
