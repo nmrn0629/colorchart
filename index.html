@@ -96,7 +96,7 @@
     #previewCanvas {
       width: 100%;
       display: block;
-      aspect-ratio: 1024 / 1536;
+      aspect-ratio: 1080 / 1353;
     }
 
     .control-panel {
@@ -402,7 +402,7 @@
     let grainEmbossMap = null;
     let silverRingAsset = null;
     let goldRingAsset = null;
-    let metalBounds = null;
+    let colorAreaBounds = null;
     let imageReady = false;
 
     function clamp(v, min = 0, max = 255) {
@@ -568,6 +568,17 @@
 
       if (maxX < minX || maxY < minY) return null;
       return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+    }
+
+    function mergeBounds(a, b) {
+      if (!a && !b) return null;
+      if (!a) return b;
+      if (!b) return a;
+      const x = Math.min(a.x, b.x);
+      const y = Math.min(a.y, b.y);
+      const maxX = Math.max(a.x + a.w, b.x + b.w);
+      const maxY = Math.max(a.y + a.h, b.y + b.h);
+      return { x, y, w: maxX - x, h: maxY - y };
     }
 
     function extractKeyRingAsset(image) {
@@ -742,7 +753,9 @@
         smoothMask(boneMask, width, height, 2);
       }
       smoothMask(metalMask, width, height, 2);
-      metalBounds = computeMaskBounds(metalMask, width, height);
+      const dogBounds = computeMaskBounds(dogMask, width, height);
+      const boneBounds = computeMaskBounds(boneMask, width, height);
+      colorAreaBounds = mergeBounds(dogBounds, boneBounds);
       buildInternalStitchMasks(src, width, height);
     }
 
@@ -1176,23 +1189,32 @@
     }
 
     function drawSelectedKeyRing(width, height) {
-      if (!metalBounds) return;
       const asset = state.metal === "silver" ? silverRingAsset : goldRingAsset;
       if (!asset) return;
 
-      const padX = Math.max(1, Math.round(width * 0.004));
-      const padY = Math.max(1, Math.round(height * 0.003));
-      const rawX = metalBounds.x - padX;
-      const rawY = metalBounds.y - padY;
-      const rawW = metalBounds.w + padX * 2;
-      const rawH = metalBounds.h + padY * 2;
-      const targetX = Math.max(0, rawX);
-      const targetY = Math.max(0, rawY);
-      const targetW = Math.min(width - targetX, rawW - (targetX - rawX));
-      const targetH = Math.min(height - targetY, rawH - (targetY - rawY));
-      if (targetW <= 0 || targetH <= 0) return;
+      const margin = Math.max(8, Math.round(Math.min(width, height) * 0.012));
+      const topLimit = colorAreaBounds
+        ? Math.max(margin * 2, colorAreaBounds.y - margin)
+        : Math.round(height * 0.24);
+      const maxDrawHeight = topLimit - margin;
+      if (maxDrawHeight < 20) return;
 
-      ctx.drawImage(asset, targetX, targetY, targetW, targetH);
+      const maxDrawWidth = Math.round(width * 0.34);
+      const scale = Math.min(
+        maxDrawWidth / asset.width,
+        maxDrawHeight / asset.height
+      );
+      const drawW = Math.max(24, Math.round(asset.width * scale));
+      const drawH = Math.max(20, Math.round(asset.height * scale));
+
+      const targetX = Math.round((width - drawW) / 2);
+      let targetY = Math.round((topLimit - drawH) / 2);
+      targetY = Math.max(margin, targetY);
+      if (targetY + drawH > topLimit) {
+        targetY = Math.max(margin, topLimit - drawH);
+      }
+
+      ctx.drawImage(asset, targetX, targetY, drawW, drawH);
     }
 
     function stitchPixelTone(base) {
@@ -1227,7 +1249,7 @@
         } else if (boneMask[idx]) {
           result = leatherTone(base, boneTarget, idx);
         } else if (metalMask[idx]) {
-          result = hasRingAsset ? { r: 236, g: 236, b: 236 } : metalTone(base, state.metal);
+          result = metalTone(base, state.metal);
         }
 
         if (stitchDogMask[idx] || stitchBoneMask[idx]) {
@@ -1241,7 +1263,7 @@
       }
 
       ctx.putImageData(out, 0, 0);
-      if (hasRingAsset) {
+      if (hasRingAsset && colorAreaBounds) {
         drawSelectedKeyRing(width, height);
       }
     }
@@ -1313,7 +1335,7 @@
     }
 
     function initImage() {
-      baseImage.src = "ステッチドーナツ.jpg";
+      baseImage.src = "ドーナツ2.jpg";
       baseImage.onload = () => {
         offscreen.width = baseImage.naturalWidth;
         offscreen.height = baseImage.naturalHeight;
