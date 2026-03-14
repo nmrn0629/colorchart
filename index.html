@@ -326,33 +326,33 @@
 
   <script>
     const COLORS = [
-      { name: "ゴールド", group: "イエロー/オレンジ", hex: "#b88853" },
-      { name: "オレンジ", group: "イエロー/オレンジ", hex: "#d27e37" },
-      { name: "ライムイエロー", group: "イエロー/オレンジ", hex: "#dad049" },
-      { name: "ペールイエロー", group: "イエロー/オレンジ", hex: "#d9d5a9" },
-      { name: "ブリック", group: "イエロー/オレンジ", hex: "#8e5950" },
-      { name: "ピスタチオ", group: "イエロー/オレンジ", hex: "#9ab085" },
+      { name: "ゴールド", group: "イエロー/オレンジ", hex: "#cb945f" },
+      { name: "オレンジ", group: "イエロー/オレンジ", hex: "#e59032" },
+      { name: "ライムイエロー", group: "イエロー/オレンジ", hex: "#f1e157" },
+      { name: "ペールイエロー", group: "イエロー/オレンジ", hex: "#f5ebb7" },
+      { name: "ブリック", group: "イエロー/オレンジ", hex: "#8a5653" },
+      { name: "ピスタチオ", group: "イエロー/オレンジ", hex: "#99b482" },
 
-      { name: "ブラック", group: "ベーシック", hex: "#202930" },
-      { name: "グレージュ", group: "ベーシック", hex: "#70655c" },
-      { name: "ブラウン", group: "ベーシック", hex: "#93624e" },
-      { name: "チャコールグレー", group: "ベーシック", hex: "#4b4d50" },
-      { name: "アイボリー", group: "ベーシック", hex: "#dfddd6" },
-      { name: "エトープ", group: "ベーシック", hex: "#b5a58f" },
+      { name: "ブラック", group: "ベーシック", hex: "#41413d" },
+      { name: "グレージュ", group: "ベーシック", hex: "#817469" },
+      { name: "ブラウン", group: "ベーシック", hex: "#925a45" },
+      { name: "チャコールグレー", group: "ベーシック", hex: "#616162" },
+      { name: "アイボリー", group: "ベーシック", hex: "#eee9de" },
+      { name: "エトープ", group: "ベーシック", hex: "#a18c71" },
 
-      { name: "ライトブルー", group: "ブルー", hex: "#90cecf" },
-      { name: "シェルブルー", group: "ブルー", hex: "#70b7cc" },
-      { name: "ミストブルー", group: "ブルー", hex: "#78b5ca" },
-      { name: "アイスグレー", group: "ブルー", hex: "#c4c8c9" },
-      { name: "ロイヤルブルー", group: "ブルー", hex: "#4f66d4" },
-      { name: "ネイビー", group: "ブルー", hex: "#30405e" },
+      { name: "ライトブルー", group: "ブルー", hex: "#afece8" },
+      { name: "シェルブルー", group: "ブルー", hex: "#6cb9cf" },
+      { name: "ミストブルー", group: "ブルー", hex: "#7cacc1" },
+      { name: "アイスグレー", group: "ブルー", hex: "#cccecd" },
+      { name: "ロイヤルブルー", group: "ブルー", hex: "#4661c6" },
+      { name: "ネイビー", group: "ブルー", hex: "#3a4b60" },
 
-      { name: "ピンク", group: "ピンク/レッド", hex: "#dd7084" },
-      { name: "レッド", group: "ピンク/レッド", hex: "#ca5054" },
-      { name: "ローズピンク", group: "ピンク/レッド", hex: "#a65782" },
-      { name: "パープル", group: "ピンク/レッド", hex: "#8960a0" },
-      { name: "ペールピンク", group: "ピンク/レッド", hex: "#d9c7d7" },
-      { name: "コーラルピンク", group: "ピンク/レッド", hex: "#dd9d86" }
+      { name: "ピンク", group: "ピンク/レッド", hex: "#f87f8f" },
+      { name: "レッド", group: "ピンク/レッド", hex: "#e55a60" },
+      { name: "ローズピンク", group: "ピンク/レッド", hex: "#a94174" },
+      { name: "パープル", group: "ピンク/レッド", hex: "#a854a4" },
+      { name: "ペールピンク", group: "ピンク/レッド", hex: "#e8cfde" },
+      { name: "コーラルピンク", group: "ピンク/レッド", hex: "#f0a180" }
     ];
 
     const GROUPS = ["すべて", ...new Set(COLORS.map((c) => c.group))];
@@ -944,13 +944,13 @@
       const spread = (Math.max(base.r, base.g, base.b) - Math.min(base.r, base.g, base.b)) / 255;
       const grain = grainMap ? grainMap[idx] : 0;
       const emboss = grainEmbossMap ? grainEmbossMap[idx] : 0;
-      const factor = 0.55 + lum * 0.33 + spread * 0.17 + grain * 0.42;
-      const lift = grain * 18;
-      const bump = emboss * 16;
+      const factor = 0.82 + lum * 0.22 + spread * 0.08 + grain * 0.22;
+      const lift = grain * 11;
+      const bump = emboss * 9;
       return {
-        r: clamp(target.r * factor + lift * 0.50 + bump),
-        g: clamp(target.g * factor + lift * 0.35 + bump * 0.85),
-        b: clamp(target.b * factor - lift * 0.24 - bump * 0.70)
+        r: clamp(target.r * factor + lift * 0.42 + bump),
+        g: clamp(target.g * factor + lift * 0.32 + bump * 0.82),
+        b: clamp(target.b * factor - lift * 0.18 - bump * 0.58)
       };
     }
 
