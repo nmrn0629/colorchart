@@ -298,7 +298,7 @@
         <h2>金具カラー</h2>
         <div class="metal-options">
           <button id="metalSilver" class="metal-btn active" type="button">シルバー</button>
-          <button id="metalGold" class="metal-btn" type="button">黄味を抑えたゴールド</button>
+          <button id="metalGold" class="metal-btn" type="button">ゴールド</button>
         </div>
       </div>
 
@@ -459,7 +459,7 @@
     }
 
     function updateSummary() {
-      const metalName = state.metal === "silver" ? "シルバー" : "黄味を抑えたゴールド";
+      const metalName = state.metal === "silver" ? "シルバー" : "ゴールド";
       summaryEl.textContent =
         `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」。`;
     }
