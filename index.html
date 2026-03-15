@@ -546,17 +546,17 @@
     }
 
     function loadLeatherPatch() {
-      grainSourceImage.src = "ブラウン系.jpg";
+      let usedFallback = false;
       grainSourceImage.onload = () => {
         const srcW = grainSourceImage.naturalWidth;
         const srcH = grainSourceImage.naturalHeight;
-        const sx = Math.floor(srcW * 0.06);
-        const sy = Math.floor(srcH * 0.06);
-        const sw = Math.max(120, Math.floor(srcW * 0.20));
-        const sh = Math.max(120, Math.floor(srcH * 0.20));
+        const sx = Math.floor(srcW * 0.10);
+        const sy = Math.floor(srcH * 0.12);
+        const sw = Math.max(160, Math.floor(srcW * 0.80));
+        const sh = Math.max(160, Math.floor(srcH * 0.76));
 
-        grainPatchWidth = 200;
-        grainPatchHeight = 200;
+        grainPatchWidth = 256;
+        grainPatchHeight = 256;
         grainPatchCanvas.width = grainPatchWidth;
         grainPatchCanvas.height = grainPatchHeight;
         grainPatchCtx.drawImage(grainSourceImage, sx, sy, sw, sh, 0, 0, grainPatchWidth, grainPatchHeight);
@@ -567,6 +567,13 @@
           render();
         }
       };
+      grainSourceImage.onerror = () => {
+        if (!usedFallback) {
+          usedFallback = true;
+          grainSourceImage.src = "ブラウン系.jpg";
+        }
+      };
+      grainSourceImage.src = "質感.jpg";
     }
 
     function buildLeatherGrainMap(width, height) {
@@ -593,7 +600,8 @@
             const center1 = lum1 - 0.5;
             const center2 = lum2 - 0.5;
             const pebble = (1 - Math.abs(center1 * 2)) - 0.5;
-            grainMap[idx] = center1 * 0.92 + center2 * 0.48 + pebble * 0.44;
+            const micro = (center1 - center2) * 0.56;
+            grainMap[idx] = center1 * 1.08 + center2 * 0.68 + pebble * 0.62 + micro;
           } else {
             const n1 = Math.sin(x * 0.081 + y * 0.053);
             const n2 = Math.cos(x * 0.132 - y * 0.119);
@@ -608,7 +616,7 @@
           const idx = y * width + x;
           const gx = grainMap[idx + 1] - grainMap[idx - 1];
           const gy = grainMap[idx + width] - grainMap[idx - width];
-          grainEmbossMap[idx] = gx * 0.72 + gy * 0.54;
+          grainEmbossMap[idx] = gx * 0.95 + gy * 0.72;
         }
       }
     }
@@ -1219,13 +1227,13 @@
       const spread = (Math.max(base.r, base.g, base.b) - Math.min(base.r, base.g, base.b)) / 255;
       const grain = grainMap ? grainMap[idx] : 0;
       const emboss = grainEmbossMap ? grainEmbossMap[idx] : 0;
-      const factor = 0.82 + lum * 0.22 + spread * 0.08 + grain * 0.22;
-      const lift = grain * 11;
-      const bump = emboss * 9;
+      const factor = 0.80 + lum * 0.20 + spread * 0.10 + grain * 0.28;
+      const lift = grain * 16;
+      const bump = emboss * 12;
       return {
-        r: clamp(target.r * factor + lift * 0.42 + bump),
-        g: clamp(target.g * factor + lift * 0.32 + bump * 0.82),
-        b: clamp(target.b * factor - lift * 0.18 - bump * 0.58)
+        r: clamp(target.r * factor + lift * 0.50 + bump * 1.05),
+        g: clamp(target.g * factor + lift * 0.40 + bump * 0.90),
+        b: clamp(target.b * factor - lift * 0.24 - bump * 0.62)
       };
     }
 
