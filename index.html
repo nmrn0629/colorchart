@@ -205,13 +205,16 @@
     }
 
     .summary {
-      font-size: 0.84rem;
-      line-height: 1.65;
+      font-size: 0.82rem;
+      line-height: 1.6;
       margin: 0;
       background: rgba(244, 241, 231, 0.95);
       border-radius: 10px;
       padding: 10px 12px;
       border: 1px solid rgba(38, 50, 65, 0.14);
+      font-family: "Consolas", "Menlo", "Monaco", monospace;
+      white-space: pre-wrap;
+      overflow-x: auto;
     }
 
     .charts {
@@ -268,10 +271,9 @@
     <section class="panel preview-panel">
       <div class="preview-header">
         <div>
-          <h1>ドーナツ x キャンディ 配色プレビュー</h1>
-          <p class="sub">ヴォーエプソン風のシボ感を残して、色組み合わせを確認できます。</p>
+          <h1>配色プレビュー</h1>
         </div>
-        <span class="tag">ベース: ステッチドーナツ</span>
+        <span class="tag">ベース: ドーナツ2</span>
       </div>
       <div class="canvas-wrap">
         <canvas id="previewCanvas" width="1024" height="1536"></canvas>
@@ -302,7 +304,7 @@
         </div>
       </div>
 
-      <p id="summary" class="summary"></p>
+      <pre class="summary"><code id="summary"></code></pre>
 
       <div class="block">
         <h2>カラーチャート（参照）</h2>
@@ -460,8 +462,12 @@
 
     function updateSummary() {
       const metalName = state.metal === "silver" ? "シルバー" : "ゴールド";
-      summaryEl.textContent =
-        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」。`;
+      const summary = {
+        donut: state.dogColor.name,
+        candy: state.boneColor.name,
+        metal: metalName
+      };
+      summaryEl.textContent = JSON.stringify(summary, null, 2);
     }
 
     function positiveMod(value, mod) {
