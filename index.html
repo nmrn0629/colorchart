@@ -302,14 +302,6 @@
         </div>
       </div>
 
-      <div class="block">
-        <h2>点線カラー</h2>
-        <div class="metal-options">
-          <button id="stitchWhite" class="metal-btn" type="button">白</button>
-          <button id="stitchBlack" class="metal-btn active" type="button">黒</button>
-        </div>
-      </div>
-
       <p id="summary" class="summary"></p>
 
       <div class="block">
@@ -362,8 +354,7 @@
       boneColor: COLORS.find((c) => c.name === "ライムイエロー") || COLORS[0],
       dogGroup: "すべて",
       boneGroup: "すべて",
-      metal: "silver",
-      stitch: "black"
+      metal: "silver"
     };
 
     const canvas = document.getElementById("previewCanvas");
@@ -377,8 +368,6 @@
     const boneSwatchesEl = document.getElementById("boneSwatches");
     const metalSilverBtn = document.getElementById("metalSilver");
     const metalGoldBtn = document.getElementById("metalGold");
-    const stitchWhiteBtn = document.getElementById("stitchWhite");
-    const stitchBlackBtn = document.getElementById("stitchBlack");
 
     const baseImage = new Image();
     const offscreen = document.createElement("canvas");
@@ -471,9 +460,8 @@
 
     function updateSummary() {
       const metalName = state.metal === "silver" ? "シルバー" : "黄味を抑えたゴールド";
-      const stitchName = state.stitch === "white" ? "白" : "黒";
       summaryEl.textContent =
-        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」 / 点線「${stitchName}」。`;
+        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」。`;
     }
 
     function positiveMod(value, mod) {
@@ -1219,10 +1207,6 @@
 
     function stitchPixelTone(base) {
       const lum = (0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b) / 255;
-      if (state.stitch === "white") {
-        const tone = 248 + lum * 7;
-        return { r: clamp(tone + 2), g: clamp(tone + 2), b: clamp(tone) };
-      }
       const tone = 6 + lum * 14;
       return { r: clamp(tone), g: clamp(tone), b: clamp(tone + 1) };
     }
@@ -1310,22 +1294,6 @@
         state.metal = "gold";
         metalGoldBtn.classList.add("active");
         metalSilverBtn.classList.remove("active");
-        updateSummary();
-        render();
-      });
-
-      stitchWhiteBtn.addEventListener("click", () => {
-        state.stitch = "white";
-        stitchWhiteBtn.classList.add("active");
-        stitchBlackBtn.classList.remove("active");
-        updateSummary();
-        render();
-      });
-
-      stitchBlackBtn.addEventListener("click", () => {
-        state.stitch = "black";
-        stitchBlackBtn.classList.add("active");
-        stitchWhiteBtn.classList.remove("active");
         updateSummary();
         render();
       });
