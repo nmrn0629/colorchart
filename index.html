@@ -205,16 +205,43 @@
     }
 
     .summary {
-      font-size: 0.82rem;
-      line-height: 1.6;
+      font-size: 0.84rem;
+      line-height: 1.65;
       margin: 0;
       background: rgba(244, 241, 231, 0.95);
       border-radius: 10px;
       padding: 10px 12px;
+      padding-right: 92px;
       border: 1px solid rgba(38, 50, 65, 0.14);
-      font-family: "Consolas", "Menlo", "Monaco", monospace;
-      white-space: pre-wrap;
-      overflow-x: auto;
+    }
+
+    .summary-wrap {
+      position: relative;
+    }
+
+    .summary-copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      border: 1px solid rgba(38, 50, 65, 0.2);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.88);
+      color: #1f2a37;
+      padding: 4px 10px;
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+
+    .summary-copy-btn:hover {
+      background: white;
+      border-color: rgba(38, 50, 65, 0.36);
+    }
+
+    .summary-copy-btn:disabled {
+      opacity: 0.72;
+      cursor: default;
     }
 
     .charts {
@@ -304,7 +331,10 @@
         </div>
       </div>
 
-      <pre class="summary"><code id="summary"></code></pre>
+      <div class="summary-wrap">
+        <button id="copySummary" class="summary-copy-btn" type="button">コピー</button>
+        <p id="summary" class="summary"></p>
+      </div>
 
       <div class="block">
         <h2>カラーチャート（参照）</h2>
@@ -363,6 +393,7 @@
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     const loadingEl = document.getElementById("loading");
     const summaryEl = document.getElementById("summary");
+    const copySummaryBtn = document.getElementById("copySummary");
 
     const dogGroupEl = document.getElementById("dogGroup");
     const boneGroupEl = document.getElementById("boneGroup");
@@ -462,12 +493,46 @@
 
     function updateSummary() {
       const metalName = state.metal === "silver" ? "シルバー" : "ゴールド";
-      const summary = {
-        donut: state.dogColor.name,
-        candy: state.boneColor.name,
-        metal: metalName
-      };
-      summaryEl.textContent = JSON.stringify(summary, null, 2);
+      summaryEl.textContent =
+        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」。`;
+    }
+
+    async function copySummaryText() {
+      const text = summaryEl.textContent.trim();
+      if (!text) return;
+
+      let copied = false;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        }
+      } catch {
+        copied = false;
+      }
+
+      if (!copied) {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          copied = document.execCommand("copy");
+        } catch {
+          copied = false;
+        }
+        textarea.remove();
+      }
+
+      copySummaryBtn.textContent = copied ? "コピーしました" : "コピー失敗";
+      copySummaryBtn.disabled = true;
+      window.setTimeout(() => {
+        copySummaryBtn.textContent = "コピー";
+        copySummaryBtn.disabled = false;
+      }, 1200);
     }
 
     function positiveMod(value, mod) {
@@ -1302,6 +1367,10 @@
         metalSilverBtn.classList.remove("active");
         updateSummary();
         render();
+      });
+
+      copySummaryBtn.addEventListener("click", () => {
+        copySummaryText();
       });
 
       rerenderSwatches();
