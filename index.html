@@ -302,17 +302,23 @@
 
     <section class="panel control-panel">
       <div class="block">
-        <h2>カラー選択</h2>
-        <div class="selector-row">
-          <label for="dogGroup">ドーナツ / グループ</label>
-          <select id="dogGroup"></select>
-        </div>
-        <div class="swatches" id="dogSwatches"></div>
+        <h2>左のチャーム</h2>
+        <div class="metal-options" id="slot0TypeBtns"></div>
         <div class="selector-row" style="margin-top: 10px;">
-          <label for="boneGroup">キャンディ / グループ</label>
-          <select id="boneGroup"></select>
+          <label for="slot0Group">グループ</label>
+          <select id="slot0Group"></select>
         </div>
-        <div class="swatches" id="boneSwatches"></div>
+        <div class="swatches" id="slot0Swatches"></div>
+      </div>
+
+      <div class="block">
+        <h2>右のチャーム</h2>
+        <div class="metal-options" id="slot1TypeBtns"></div>
+        <div class="selector-row" style="margin-top: 10px;">
+          <label for="slot1Group">グループ</label>
+          <select id="slot1Group"></select>
+        </div>
+        <div class="swatches" id="slot1Swatches"></div>
       </div>
 
       <div class="block">
@@ -327,6 +333,13 @@
         <h2>ステッチ</h2>
         <div class="metal-options">
           <button id="stitchToggle" class="metal-btn" type="button">ステッチを黒に</button>
+        </div>
+      </div>
+
+      <div class="block">
+        <h2>配置</h2>
+        <div class="metal-options">
+          <button id="swapCharms" class="metal-btn" type="button">左右を入れ替え</button>
         </div>
       </div>
 
@@ -371,14 +384,68 @@
 
     const GROUPS = ["すべて", ...new Set(COLORS.map((c) => c.group))];
 
+    const CHARM_TYPES = ["donut", "candy", "heart"];
+    const CHARM_DEFS = {
+      donut: {
+        label: "ドーナツ",
+        image: "ドーナツ透過.png",
+        widthFrac: 0.34,
+        mask: { kind: "donut", seedDX: 0.102, seedY: 0.620 },
+        stitch: {
+          kind: "radial",
+          centerDX: 0, centerY: 0.620,
+          rx: 0.172, ry: 0.154,
+          outerR: 0.875, outerTol: 0.048, outerTolRelax: 0.058,
+          innerR: 0.440, innerTol: 0.040, innerTolRelax: 0.050,
+          window: { dx: [-0.192, 0.208], y: [0.46, 0.79] },
+          minCount: 120
+        }
+      },
+      candy: {
+        label: "キャンディ",
+        image: "キャンディ透過.png",
+        widthFrac: 0.28,
+        mask: { kind: "candy", seedDX: 0, seedY: 0.640 },
+        stitch: {
+          kind: "candy",
+          tRange: [0.45, 0.83],
+          window: { dx: [-0.098, 0.102], y: [0.45, 0.83] },
+          minCount: 80
+        }
+      },
+      heart: {
+        label: "ハート",
+        image: "ハート透過.png",
+        widthFrac: 0.30,
+        mask: { kind: "heart", seedDX: 0, seedY: 0.660 },
+        stitch: {
+          kind: "heart",
+          window: { dx: [-0.14, 0.14], y: [0.48, 0.78] },
+          insetPasses: 4,
+          maxBandPasses: 8,
+          minCount: 100
+        }
+      }
+    };
+
     const state = {
-      dogColor: COLORS.find((c) => c.name === "ネイビー") || COLORS[0],
-      boneColor: COLORS.find((c) => c.name === "ライムイエロー") || COLORS[0],
-      dogGroup: "すべて",
-      boneGroup: "すべて",
+      slots: [
+        {
+          type: "donut",
+          color: COLORS.find((c) => c.name === "ネイビー") || COLORS[0],
+          group: "すべて"
+        },
+        {
+          type: "candy",
+          color: COLORS.find((c) => c.name === "ライムイエロー") || COLORS[0],
+          group: "すべて"
+        }
+      ],
       metal: "silver",
       stitch: "white"
     };
+    const SLOT_CENTER_X = [0.332, 0.698];
+    const SLOT_CENTER_Y = 0.640;
 
     const canvas = document.getElementById("previewCanvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -386,13 +453,14 @@
     const summaryEl = document.getElementById("summary");
     const copySummaryBtn = document.getElementById("copySummary");
 
-    const dogGroupEl = document.getElementById("dogGroup");
-    const boneGroupEl = document.getElementById("boneGroup");
-    const dogSwatchesEl = document.getElementById("dogSwatches");
-    const boneSwatchesEl = document.getElementById("boneSwatches");
+    const slotGroupEls = [document.getElementById("slot0Group"), document.getElementById("slot1Group")];
+    const slotSwatchesEls = [document.getElementById("slot0Swatches"), document.getElementById("slot1Swatches")];
+    const slotTypeBtnContainers = [document.getElementById("slot0TypeBtns"), document.getElementById("slot1TypeBtns")];
+    const slotTypeButtons = [{}, {}];
     const metalSilverBtn = document.getElementById("metalSilver");
     const metalGoldBtn = document.getElementById("metalGold");
     const stitchToggleBtn = document.getElementById("stitchToggle");
+    const swapCharmsBtn = document.getElementById("swapCharms");
 
     const offscreen = document.createElement("canvas");
     const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -403,11 +471,9 @@
     const goldRingImage = new Image();
 
     let baseData = null;
-    let dogMask = null;
-    let boneMask = null;
+    let slotMasks = [null, null];
+    let slotStitchMasks = [null, null];
     let metalMask = null;
-    let stitchDogMask = null;
-    let stitchBoneMask = null;
     let stitchBlackMask = null;
     let outlineMask = null;
     let grainPatchData = null;
@@ -487,8 +553,9 @@
     function updateSummary() {
       const metalName = state.metal === "silver" ? "シルバー" : "ゴールド";
       const stitchName = state.stitch === "white" ? "白" : "黒";
+      const parts = state.slots.map((slot) => `${CHARM_DEFS[slot.type].label}「${slot.color.name}」`);
       summaryEl.textContent =
-        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」 / ステッチ「${stitchName}」。`;
+        `現在の組み合わせ: 左${parts[0]} / 右${parts[1]} / 金具「${metalName}」 / ステッチ「${stitchName}」。`;
     }
 
     async function copySummaryText() {
@@ -738,87 +805,23 @@
 
     function classifyMasks(imageData, width, height) {
       const src = imageData.data;
-      dogMask = new Uint8Array(width * height);
-      boneMask = new Uint8Array(width * height);
+      slotMasks[0] = new Uint8Array(width * height);
+      slotMasks[1] = new Uint8Array(width * height);
+      slotStitchMasks[0] = new Uint8Array(width * height);
+      slotStitchMasks[1] = new Uint8Array(width * height);
       metalMask = new Uint8Array(width * height);
-      stitchDogMask = new Uint8Array(width * height);
-      stitchBoneMask = new Uint8Array(width * height);
       stitchBlackMask = new Uint8Array(width * height);
       outlineMask = new Uint8Array(width * height);
-      let dogCount = 0;
-      let boneCount = 0;
 
-      for (let y = 0; y < height; y += 1) {
-        for (let x = 0; x < width; x += 1) {
-          const i = (y * width + x) * 4;
-          const r = src[i];
-          const g = src[i + 1];
-          const b = src[i + 2];
-          const hsv = rgbToHsv(r, g, b);
-          const satSpread = Math.max(r, g, b) - Math.min(r, g, b);
+      applyCharmMasks(width, height, src);
 
-          const inMainArea = x > width * 0.16 && x < width * 0.84 && y > height * 0.12 && y < height * 0.95;
-          const isBackground = r > 222 && g > 222 && b > 222 && satSpread < 23;
-
-          if (!inMainArea || isBackground) {
-            continue;
-          }
-
-          const idx = y * width + x;
-
-          const isDog =
-            y > height * 0.18 &&
-            y < height * 0.68 &&
-            x > width * 0.17 &&
-            x < width * 0.76 &&
-            hsv.v < 0.42 &&
-            hsv.s > 0.12 &&
-            satSpread > 15;
-
-          const isBone =
-            y > height * 0.32 &&
-            x > width * 0.26 &&
-            x < width * 0.8 &&
-            hsv.h > 35 &&
-            hsv.h < 76 &&
-            hsv.s > 0.2 &&
-            hsv.v > 0.36;
-
-          const isMetal =
-            y < height * 0.54 &&
-            x > width * 0.24 &&
-            x < width * 0.72 &&
-            hsv.s < 0.35 &&
-            hsv.v > 0.28 &&
-            hsv.v < 0.93 &&
-            satSpread < 80;
-
-          if (isDog) {
-            dogMask[idx] = 1;
-            dogCount += 1;
-          } else if (isBone) {
-            boneMask[idx] = 1;
-            boneCount += 1;
-          } else if (isMetal) {
-            metalMask[idx] = 1;
-          }
-        }
-      }
-
-      const area = width * height;
-      let usedLineFittedMask = false;
-      if (dogCount < area * 0.01 && boneCount < area * 0.015) {
-        usedLineFittedMask = applyDonutCandyMasks(width, height, src);
-      }
-
-      if (!usedLineFittedMask) {
-        smoothMask(dogMask, width, height, 2);
-        smoothMask(boneMask, width, height, 2);
-      }
+      smoothMask(slotMasks[0], width, height, 2);
+      smoothMask(slotMasks[1], width, height, 2);
       smoothMask(metalMask, width, height, 2);
-      const dogBounds = computeMaskBounds(dogMask, width, height);
-      const boneBounds = computeMaskBounds(boneMask, width, height);
-      colorAreaBounds = mergeBounds(dogBounds, boneBounds);
+
+      const bounds0 = computeMaskBounds(slotMasks[0], width, height);
+      const bounds1 = computeMaskBounds(slotMasks[1], width, height);
+      colorAreaBounds = mergeBounds(bounds0, bounds1);
       buildInternalStitchMasks(src, width, height);
     }
 
@@ -976,44 +979,68 @@
       return count;
     }
 
-    function applyApproxDonutCandyMasks(width, height, barrier) {
+    function applyApproxCharmMask(slotIdx, type, width, height, barrier) {
+      const cx = SLOT_CENTER_X[slotIdx];
+      const cy = SLOT_CENTER_Y;
+      const mask = slotMasks[slotIdx];
       for (let y = 0; y < height; y += 1) {
         const ny = (y + 0.5) / height;
         for (let x = 0; x < width; x += 1) {
           const nx = (x + 0.5) / width;
           const idx = y * width + x;
+          if (barrier[idx]) continue;
 
-          if (barrier[idx]) {
-            continue;
+          let inside = false;
+          if (type === "donut") {
+            const dx = (nx - cx) / 0.172;
+            const dy = (ny - 0.620) / 0.154;
+            const radius = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
+            const outerWave = 0.965 + 0.018 * Math.sin(angle * 6);
+            const innerWave = 0.372 + 0.014 * Math.sin((angle + 0.8) * 4);
+            inside =
+              Math.abs(nx - cx) < 0.22 &&
+              ny > 0.45 && ny < 0.80 &&
+              radius < outerWave && radius > innerWave;
+          } else if (type === "candy") {
+            if (ny >= 0.45 && ny <= 0.83) {
+              const t = (ny - 0.45) / 0.38;
+              const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.010);
+              inside = Math.abs(nx - cx) < halfWidth;
+            }
+          } else if (type === "heart") {
+            const hx = (nx - cx) / 0.15;
+            const hy = -(ny - cy) / 0.14 + 0.35;
+            const v = Math.pow(hx * hx + hy * hy - 1, 3) - hx * hx * Math.pow(hy, 3);
+            inside = v <= 0;
           }
 
-          const dx = (nx - 0.332) / 0.172;
-          const dy = (ny - 0.620) / 0.154;
-          const radius = Math.sqrt(dx * dx + dy * dy);
-          const angle = Math.atan2(dy, dx);
-          const outerWave = 0.965 + 0.018 * Math.sin(angle * 6);
-          const innerWave = 0.372 + 0.014 * Math.sin((angle + 0.8) * 4);
-          const inDonut =
-            nx > 0.13 &&
-            nx < 0.55 &&
-            ny > 0.45 &&
-            ny < 0.80 &&
-            radius < outerWave &&
-            radius > innerWave;
-
-          let inCandy = false;
-          if (ny >= 0.45 && ny <= 0.83) {
-            const t = (ny - 0.45) / 0.38;
-            const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.010);
-            inCandy = Math.abs(nx - 0.698) < halfWidth;
-          }
-
-          if (inDonut) {
-            dogMask[idx] = 1;
-          } else if (inCandy) {
-            boneMask[idx] = 1;
-          }
+          if (inside) mask[idx] = 1;
         }
+      }
+    }
+
+    function applyCharmMasks(width, height, src) {
+      slotMasks[0].fill(0);
+      slotMasks[1].fill(0);
+      const barrier = buildLineBarrier(src, width, height);
+      const outside = markOutsideArea(barrier, width, height);
+      const area = width * height;
+
+      for (let s = 0; s < 2; s += 1) {
+        const type = state.slots[s].type;
+        const def = CHARM_DEFS[type].mask;
+        const anchorX = SLOT_CENTER_X[s] + def.seedDX;
+        const anchorY = def.seedY;
+        const seed = findEnclosedSeed(anchorX, anchorY, width, height, barrier, outside);
+        const size = floodFillRegion(seed, width, height, barrier, outside, slotMasks[s]);
+
+        if (size < area * 0.01) {
+          slotMasks[s].fill(0);
+          applyApproxCharmMask(s, type, width, height, barrier);
+        }
+
+        insetMaskFromBarrier(slotMasks[s], barrier, width, height, 2);
       }
     }
 
@@ -1038,30 +1065,7 @@
       }
     }
 
-    function applyDonutCandyMasks(width, height, src) {
-      dogMask.fill(0);
-      boneMask.fill(0);
-      const barrier = buildLineBarrier(src, width, height);
-      const outside = markOutsideArea(barrier, width, height);
-
-      const donutSeed = findEnclosedSeed(0.434, 0.620, width, height, barrier, outside);
-      const candySeed = findEnclosedSeed(0.698, 0.640, width, height, barrier, outside);
-      const donutSize = floodFillRegion(donutSeed, width, height, barrier, outside, dogMask);
-      const candySize = floodFillRegion(candySeed, width, height, barrier, outside, boneMask);
-
-      const area = width * height;
-      if (donutSize < area * 0.01 || candySize < area * 0.01) {
-        dogMask.fill(0);
-        boneMask.fill(0);
-        applyApproxDonutCandyMasks(width, height, barrier);
-      }
-
-      insetMaskFromBarrier(dogMask, barrier, width, height, 2);
-      insetMaskFromBarrier(boneMask, barrier, width, height, 2);
-      return true;
-    }
-
-    function isStitchLikePixel(src, width, height, x, y, relaxed = false) {
+function isStitchLikePixel(src, width, height, x, y, relaxed = false) {
       const idx = y * width + x;
       const i = idx * 4;
       const r = src[i];
@@ -1092,140 +1096,229 @@
       return contrast > (relaxed ? 3.4 : 6.2);
     }
 
-    function buildInternalStitchMasks(src, width, height) {
-      stitchDogMask.fill(0);
-      stitchBoneMask.fill(0);
-      let dogCount = 0;
-      let boneCount = 0;
+    function hasMaskNeighbor(mask, x, y, width, height, radius) {
+      for (let d = 1; d <= radius; d += 1) {
+        if (y - d >= 0 && mask[(y - d) * width + x]) return true;
+        if (y + d < height && mask[(y + d) * width + x]) return true;
+        if (x - d >= 0 && mask[y * width + (x - d)]) return true;
+        if (x + d < width && mask[y * width + (x + d)]) return true;
+      }
+      return false;
+    }
 
+    function detectDonutStitch(slotIdx, src, width, height, relaxed) {
+      const mask = slotMasks[slotIdx];
+      const stitchMask = slotStitchMasks[slotIdx];
+      const cfg = CHARM_DEFS.donut.stitch;
+      const cx = SLOT_CENTER_X[slotIdx] + cfg.centerDX;
+      const cy = cfg.centerY;
+      const outerTol = relaxed ? cfg.outerTolRelax : cfg.outerTol;
+      const innerTol = relaxed ? cfg.innerTolRelax : cfg.innerTol;
+      let count = 0;
       for (let y = 0; y < height; y += 1) {
         const ny = (y + 0.5) / height;
         for (let x = 0; x < width; x += 1) {
           const idx = y * width + x;
+          if (!mask[idx] || stitchMask[idx]) continue;
           const nx = (x + 0.5) / width;
-          if (dogMask[idx]) {
-            const dx = (nx - 0.332) / 0.172;
-            const dy = (ny - 0.620) / 0.154;
-            const radius = Math.sqrt(dx * dx + dy * dy);
-            const inDonutWindow = nx > 0.14 && nx < 0.54 && ny > 0.46 && ny < 0.79;
-            const nearOuterStitch = Math.abs(radius - 0.875) < 0.048;
-            const nearInnerStitch = Math.abs(radius - 0.440) < 0.040;
-            if (inDonutWindow && (nearOuterStitch || nearInnerStitch) && isStitchLikePixel(src, width, height, x, y, false)) {
-              stitchDogMask[idx] = 1;
-              dogCount += 1;
-              continue;
-            }
-          }
-
-          if (boneMask[idx] && ny >= 0.45 && ny <= 0.83 && nx > 0.60 && nx < 0.80) {
-            const t = (ny - 0.45) / 0.38;
-            if (t >= 0 && t <= 1) {
-              const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.010);
-              const stitchOffset = Math.max(0, halfWidth - 0.020);
-              const edgeDistance = Math.abs(Math.abs(nx - 0.698) - stitchOffset);
-              const tolerance = 0.010 + halfWidth * 0.06;
-              if (edgeDistance <= tolerance && isStitchLikePixel(src, width, height, x, y, false)) {
-                stitchBoneMask[idx] = 1;
-                boneCount += 1;
-              }
-            }
-          }
+          const dxn = nx - cx;
+          if (dxn < cfg.window.dx[0] || dxn > cfg.window.dx[1]) continue;
+          if (ny < cfg.window.y[0] || ny > cfg.window.y[1]) continue;
+          const dx = dxn / cfg.rx;
+          const dy = (ny - cy) / cfg.ry;
+          const radius = Math.sqrt(dx * dx + dy * dy);
+          const nearOuter = Math.abs(radius - cfg.outerR) < outerTol;
+          const nearInner = Math.abs(radius - cfg.innerR) < innerTol;
+          if (!nearOuter && !nearInner) continue;
+          if (!isStitchLikePixel(src, width, height, x, y, relaxed)) continue;
+          stitchMask[idx] = 1;
+          count += 1;
         }
       }
+      return count;
+    }
 
-      if (dogCount < 120 || boneCount < 80) {
-        for (let y = 0; y < height; y += 1) {
-          const ny = (y + 0.5) / height;
-          for (let x = 0; x < width; x += 1) {
+    function detectCandyStitch(slotIdx, src, width, height, relaxed) {
+      const mask = slotMasks[slotIdx];
+      const stitchMask = slotStitchMasks[slotIdx];
+      const cfg = CHARM_DEFS.candy.stitch;
+      const cx = SLOT_CENTER_X[slotIdx];
+      let count = 0;
+      for (let y = 0; y < height; y += 1) {
+        const ny = (y + 0.5) / height;
+        if (ny < cfg.tRange[0] || ny > cfg.tRange[1]) continue;
+        const t = (ny - cfg.tRange[0]) / (cfg.tRange[1] - cfg.tRange[0]);
+        const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.010);
+        const stitchOffset = Math.max(0, halfWidth - 0.020);
+        const tolerance = (relaxed ? 0.012 : 0.010) + halfWidth * (relaxed ? 0.08 : 0.06);
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+          if (!mask[idx] || stitchMask[idx]) continue;
+          const nx = (x + 0.5) / width;
+          const dxn = nx - cx;
+          if (dxn < cfg.window.dx[0] || dxn > cfg.window.dx[1]) continue;
+          const edgeDistance = Math.abs(Math.abs(dxn) - stitchOffset);
+          if (edgeDistance > tolerance) continue;
+          if (!isStitchLikePixel(src, width, height, x, y, relaxed)) continue;
+          stitchMask[idx] = 1;
+          count += 1;
+        }
+      }
+      return count;
+    }
+
+    function erodeMask(mask, width, height, passes) {
+      const result = new Uint8Array(mask);
+      for (let pass = 0; pass < passes; pass += 1) {
+        const copy = result.slice();
+        for (let y = 1; y < height - 1; y += 1) {
+          for (let x = 1; x < width - 1; x += 1) {
             const idx = y * width + x;
-            const nx = (x + 0.5) / width;
-
-            if (dogMask[idx] && !stitchDogMask[idx] && dogCount < 120) {
-              const dx = (nx - 0.332) / 0.172;
-              const dy = (ny - 0.620) / 0.154;
-              const radius = Math.sqrt(dx * dx + dy * dy);
-              const inDonutWindow = nx > 0.14 && nx < 0.54 && ny > 0.46 && ny < 0.79;
-              const nearOuterStitch = Math.abs(radius - 0.875) < 0.058;
-              const nearInnerStitch = Math.abs(radius - 0.440) < 0.050;
-              if (inDonutWindow && (nearOuterStitch || nearInnerStitch) && isStitchLikePixel(src, width, height, x, y, true)) {
-                stitchDogMask[idx] = 1;
-                dogCount += 1;
-              }
-            }
-
-            if (boneMask[idx] && !stitchBoneMask[idx] && boneCount < 80 && ny >= 0.45 && ny <= 0.83 && nx > 0.60 && nx < 0.80) {
-              const t = (ny - 0.45) / 0.38;
-              if (t >= 0 && t <= 1) {
-                const halfWidth = Math.max(0, candyHalfWidthByT(t) * 0.76 - 0.010);
-                const stitchOffset = Math.max(0, halfWidth - 0.020);
-                const edgeDistance = Math.abs(Math.abs(nx - 0.698) - stitchOffset);
-                const tolerance = 0.012 + halfWidth * 0.08;
-                if (edgeDistance <= tolerance && isStitchLikePixel(src, width, height, x, y, true)) {
-                  stitchBoneMask[idx] = 1;
-                  boneCount += 1;
-                }
-              }
+            if (!copy[idx]) continue;
+            if (!copy[idx - 1] || !copy[idx + 1] || !copy[idx - width] || !copy[idx + width]) {
+              result[idx] = 0;
             }
           }
         }
       }
+      return result;
+    }
+
+    function detectHeartStitch(slotIdx, src, width, height, relaxed) {
+      const mask = slotMasks[slotIdx];
+      const stitchMask = slotStitchMasks[slotIdx];
+      const cfg = CHARM_DEFS.heart.stitch;
+      const cx = SLOT_CENTER_X[slotIdx];
+      const innerEroded = erodeMask(mask, width, height, cfg.insetPasses);
+      const outerBand = erodeMask(mask, width, height, cfg.maxBandPasses);
+      let count = 0;
+      for (let y = 0; y < height; y += 1) {
+        const ny = (y + 0.5) / height;
+        if (ny < cfg.window.y[0] || ny > cfg.window.y[1]) continue;
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+          if (stitchMask[idx]) continue;
+          if (!innerEroded[idx] || outerBand[idx]) continue;
+          const nx = (x + 0.5) / width;
+          const dxn = nx - cx;
+          if (dxn < cfg.window.dx[0] || dxn > cfg.window.dx[1]) continue;
+          if (!isStitchLikePixel(src, width, height, x, y, relaxed)) continue;
+          stitchMask[idx] = 1;
+          count += 1;
+        }
+      }
+
+      if (count >= cfg.minCount) return count;
 
       const R = 6;
       for (let y = 0; y < height; y += 1) {
+        const ny = (y + 0.5) / height;
+        if (ny < cfg.window.y[0] || ny > cfg.window.y[1]) continue;
         for (let x = 0; x < width; x += 1) {
           const idx = y * width + x;
-          if (stitchDogMask[idx] || stitchBoneMask[idx]) continue;
+          if (stitchMask[idx] || mask[idx]) continue;
           const i = idx * 4;
           if (src[i + 3] < 32) continue;
           const lum = 0.2126 * src[i] + 0.7152 * src[i + 1] + 0.0722 * src[i + 2];
           if (lum >= 170) continue;
-
-          let dogUp = false, dogDown = false, dogLeft = false, dogRight = false;
-          let boneUp = false, boneDown = false, boneLeft = false, boneRight = false;
+          const nx = (x + 0.5) / width;
+          const dxn = nx - cx;
+          if (dxn < cfg.window.dx[0] || dxn > cfg.window.dx[1]) continue;
+          let up = false, down = false, left = false, right = false;
           for (let d = 1; d <= R; d += 1) {
-            if (!dogUp && y - d >= 0 && dogMask[(y - d) * width + x]) dogUp = true;
-            if (!dogDown && y + d < height && dogMask[(y + d) * width + x]) dogDown = true;
-            if (!dogLeft && x - d >= 0 && dogMask[y * width + (x - d)]) dogLeft = true;
-            if (!dogRight && x + d < width && dogMask[y * width + (x + d)]) dogRight = true;
-            if (!boneUp && y - d >= 0 && boneMask[(y - d) * width + x]) boneUp = true;
-            if (!boneDown && y + d < height && boneMask[(y + d) * width + x]) boneDown = true;
-            if (!boneLeft && x - d >= 0 && boneMask[y * width + (x - d)]) boneLeft = true;
-            if (!boneRight && x + d < width && boneMask[y * width + (x + d)]) boneRight = true;
+            if (!up && y - d >= 0 && mask[(y - d) * width + x]) up = true;
+            if (!down && y + d < height && mask[(y + d) * width + x]) down = true;
+            if (!left && x - d >= 0 && mask[y * width + (x - d)]) left = true;
+            if (!right && x + d < width && mask[y * width + (x + d)]) right = true;
           }
-          if ((dogUp && dogDown) || (dogLeft && dogRight)) {
-            stitchDogMask[idx] = 1;
-          } else if ((boneUp && boneDown) || (boneLeft && boneRight)) {
-            stitchBoneMask[idx] = 1;
+          if ((up && down) || (left && right)) {
+            stitchMask[idx] = 1;
+            count += 1;
+          }
+        }
+      }
+      return count;
+    }
+
+    function detectSlotStitch(slotIdx, src, width, height) {
+      const type = state.slots[slotIdx].type;
+      const cfg = CHARM_DEFS[type].stitch;
+      let count;
+      if (cfg.kind === "radial") {
+        count = detectDonutStitch(slotIdx, src, width, height, false);
+        if (count < cfg.minCount) {
+          count = detectDonutStitch(slotIdx, src, width, height, true);
+        }
+      } else if (cfg.kind === "candy") {
+        count = detectCandyStitch(slotIdx, src, width, height, false);
+        if (count < cfg.minCount) {
+          count = detectCandyStitch(slotIdx, src, width, height, true);
+        }
+      } else if (cfg.kind === "heart") {
+        count = detectHeartStitch(slotIdx, src, width, height, false);
+      }
+      return count;
+    }
+
+    function buildInternalStitchMasks(src, width, height) {
+      slotStitchMasks[0].fill(0);
+      slotStitchMasks[1].fill(0);
+      detectSlotStitch(0, src, width, height);
+      detectSlotStitch(1, src, width, height);
+
+      const GAP_R = 6;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+          if (slotStitchMasks[0][idx] || slotStitchMasks[1][idx]) continue;
+          if (slotMasks[0][idx] || slotMasks[1][idx]) continue;
+          const i = idx * 4;
+          if (src[i + 3] < 32) continue;
+          const lum = 0.2126 * src[i] + 0.7152 * src[i + 1] + 0.0722 * src[i + 2];
+          if (lum >= 170) continue;
+          for (let s = 0; s < 2; s += 1) {
+            const type = state.slots[s].type;
+            if (type !== "donut" && type !== "candy") continue;
+            const m = slotMasks[s];
+            let up = false, down = false, left = false, right = false;
+            for (let d = 1; d <= GAP_R; d += 1) {
+              if (!up && y - d >= 0 && m[(y - d) * width + x]) up = true;
+              if (!down && y + d < height && m[(y + d) * width + x]) down = true;
+              if (!left && x - d >= 0 && m[y * width + (x - d)]) left = true;
+              if (!right && x + d < width && m[y * width + (x + d)]) right = true;
+            }
+            if ((up && down) || (left && right)) {
+              slotStitchMasks[s][idx] = 1;
+              break;
+            }
           }
         }
       }
 
-      removeIsolatedStitchPixels(stitchDogMask, width, height);
-      removeIsolatedStitchPixels(stitchBoneMask, width, height);
+      removeIsolatedStitchPixels(slotStitchMasks[0], width, height);
+      removeIsolatedStitchPixels(slotStitchMasks[1], width, height);
 
       stitchBlackMask.fill(0);
       for (let idx = 0; idx < stitchBlackMask.length; idx += 1) {
-        if (stitchDogMask[idx] || stitchBoneMask[idx]) stitchBlackMask[idx] = 1;
+        if (slotStitchMasks[0][idx] || slotStitchMasks[1][idx]) stitchBlackMask[idx] = 1;
       }
+
       outlineMask.fill(0);
       const OR = 3;
+      const anyCharmMask = (idx) => slotMasks[0][idx] || slotMasks[1][idx];
       for (let y = 0; y < height; y += 1) {
         for (let x = 0; x < width; x += 1) {
           const idx = y * width + x;
-          if (stitchDogMask[idx] || stitchBoneMask[idx]) continue;
-          if (dogMask[idx] || boneMask[idx] || metalMask[idx]) continue;
+          if (slotStitchMasks[0][idx] || slotStitchMasks[1][idx]) continue;
+          if (anyCharmMask(idx) || metalMask[idx]) continue;
           const i = idx * 4;
           if (src[i + 3] < 16) continue;
           const lum = 0.2126 * src[i] + 0.7152 * src[i + 1] + 0.0722 * src[i + 2];
           if (lum >= 200) continue;
-          let hasNeighbor = false;
-          for (let d = 1; d <= OR && !hasNeighbor; d += 1) {
-            if (y - d >= 0 && (dogMask[(y - d) * width + x] || boneMask[(y - d) * width + x])) hasNeighbor = true;
-            else if (y + d < height && (dogMask[(y + d) * width + x] || boneMask[(y + d) * width + x])) hasNeighbor = true;
-            else if (x - d >= 0 && (dogMask[y * width + (x - d)] || boneMask[y * width + (x - d)])) hasNeighbor = true;
-            else if (x + d < width && (dogMask[y * width + (x + d)] || boneMask[y * width + (x + d)])) hasNeighbor = true;
+          if (hasMaskNeighbor(slotMasks[0], x, y, width, height, OR) ||
+              hasMaskNeighbor(slotMasks[1], x, y, width, height, OR)) {
+            outlineMask[idx] = 1;
           }
-          if (hasNeighbor) outlineMask[idx] = 1;
         }
       }
 
@@ -1372,19 +1465,18 @@
       const src = baseData.data;
       const out = new ImageData(width, height);
       const dst = out.data;
-      const dogTarget = hexToRgb(state.dogColor.hex);
-      const boneTarget = hexToRgb(state.boneColor.hex);
+      const slotTargets = [hexToRgb(state.slots[0].color.hex), hexToRgb(state.slots[1].color.hex)];
       const hasRingAsset = state.metal === "silver" ? !!silverRingAsset : !!goldRingAsset;
 
-      for (let idx = 0; idx < dogMask.length; idx += 1) {
+      for (let idx = 0; idx < slotMasks[0].length; idx += 1) {
         const i = idx * 4;
         const base = { r: src[i], g: src[i + 1], b: src[i + 2] };
         let result = { ...base };
 
-        if (dogMask[idx]) {
-          result = leatherTone(base, dogTarget, idx);
-        } else if (boneMask[idx]) {
-          result = leatherTone(base, boneTarget, idx);
+        if (slotMasks[0][idx]) {
+          result = leatherTone(base, slotTargets[0], idx);
+        } else if (slotMasks[1][idx]) {
+          result = leatherTone(base, slotTargets[1], idx);
         } else if (metalMask[idx]) {
           result = metalTone(base, state.metal);
         }
@@ -1414,34 +1506,58 @@
     }
 
     function initControls() {
-      buildGroupOptions(dogGroupEl);
-      buildGroupOptions(boneGroupEl);
-      dogGroupEl.value = state.dogGroup;
-      boneGroupEl.value = state.boneGroup;
-
-      function rerenderSwatches() {
-        buildSwatches(dogSwatchesEl, state.dogGroup, state.dogColor.name, (color) => {
-          state.dogColor = color;
-          rerenderSwatches();
-          updateSummary();
-          render();
-        });
-        buildSwatches(boneSwatchesEl, state.boneGroup, state.boneColor.name, (color) => {
-          state.boneColor = color;
-          rerenderSwatches();
-          updateSummary();
-          render();
-        });
+      for (let s = 0; s < 2; s += 1) {
+        buildGroupOptions(slotGroupEls[s]);
+        slotGroupEls[s].value = state.slots[s].group;
       }
 
-      dogGroupEl.addEventListener("change", () => {
-        state.dogGroup = dogGroupEl.value;
-        rerenderSwatches();
-      });
-      boneGroupEl.addEventListener("change", () => {
-        state.boneGroup = boneGroupEl.value;
-        rerenderSwatches();
-      });
+      function refreshTypeButtons() {
+        for (let s = 0; s < 2; s += 1) {
+          for (const type of CHARM_TYPES) {
+            const btn = slotTypeButtons[s][type];
+            btn.classList.toggle("active", state.slots[s].type === type);
+          }
+        }
+      }
+
+      function rerenderSwatches() {
+        for (let s = 0; s < 2; s += 1) {
+          const slotIdx = s;
+          buildSwatches(slotSwatchesEls[s], state.slots[s].group, state.slots[s].color.name, (color) => {
+            state.slots[slotIdx].color = color;
+            rerenderSwatches();
+            updateSummary();
+            render();
+          });
+        }
+      }
+
+      for (let s = 0; s < 2; s += 1) {
+        const slotIdx = s;
+        const container = slotTypeBtnContainers[s];
+        container.innerHTML = "";
+        for (const type of CHARM_TYPES) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "metal-btn";
+          btn.textContent = CHARM_DEFS[type].label;
+          btn.addEventListener("click", () => {
+            if (!imageReady) return;
+            if (state.slots[slotIdx].type === type) return;
+            state.slots[slotIdx].type = type;
+            refreshTypeButtons();
+            composeBase();
+            updateSummary();
+            render();
+          });
+          container.appendChild(btn);
+          slotTypeButtons[s][type] = btn;
+        }
+        slotGroupEls[s].addEventListener("change", () => {
+          state.slots[slotIdx].group = slotGroupEls[slotIdx].value;
+          rerenderSwatches();
+        });
+      }
 
       metalSilverBtn.addEventListener("click", () => {
         state.metal = "silver";
@@ -1467,10 +1583,24 @@
         render();
       });
 
+      swapCharmsBtn.addEventListener("click", () => {
+        if (!imageReady) return;
+        state.slots = [state.slots[1], state.slots[0]];
+        for (let s = 0; s < 2; s += 1) {
+          slotGroupEls[s].value = state.slots[s].group;
+        }
+        refreshTypeButtons();
+        rerenderSwatches();
+        composeBase();
+        updateSummary();
+        render();
+      });
+
       copySummaryBtn.addEventListener("click", () => {
         copySummaryText();
       });
 
+      refreshTypeButtons();
       rerenderSwatches();
       updateSummary();
     }
@@ -1484,32 +1614,44 @@
       });
     }
 
+    const charmImages = { donut: null, candy: null, heart: null };
+
+    function composeBase() {
+      if (!charmImages.donut || !charmImages.candy || !charmImages.heart) return;
+      const W = 1080;
+      const H = 1353;
+      offscreen.width = W;
+      offscreen.height = H;
+      canvas.width = W;
+      canvas.height = H;
+      offCtx.fillStyle = "#ffffff";
+      offCtx.fillRect(0, 0, W, H);
+
+      for (let s = 0; s < 2; s += 1) {
+        const slot = state.slots[s];
+        const def = CHARM_DEFS[slot.type];
+        const img = charmImages[slot.type];
+        const w = W * def.widthFrac;
+        const h = img.naturalHeight * (w / img.naturalWidth);
+        offCtx.drawImage(img, W * SLOT_CENTER_X[s] - w / 2, H * SLOT_CENTER_Y - h / 2, w, h);
+      }
+
+      baseData = offCtx.getImageData(0, 0, W, H);
+      classifyMasks(baseData, W, H);
+      buildLeatherGrainMap(W, H);
+    }
+
     function initImage() {
       Promise.all([
-        loadImage("ドーナツ透過.png"),
-        loadImage("キャンディ透過.png"),
+        loadImage(CHARM_DEFS.donut.image),
+        loadImage(CHARM_DEFS.candy.image),
+        loadImage(CHARM_DEFS.heart.image),
       ])
-        .then(([donutImg, candyImg]) => {
-          const W = 1080;
-          const H = 1353;
-          offscreen.width = W;
-          offscreen.height = H;
-          canvas.width = W;
-          canvas.height = H;
-          offCtx.fillStyle = "#ffffff";
-          offCtx.fillRect(0, 0, W, H);
-
-          const donutW = W * 0.34;
-          const donutH = donutImg.naturalHeight * (donutW / donutImg.naturalWidth);
-          offCtx.drawImage(donutImg, W * 0.332 - donutW / 2, H * 0.640 - donutH / 2, donutW, donutH);
-
-          const candyW = W * 0.28;
-          const candyH = candyImg.naturalHeight * (candyW / candyImg.naturalWidth);
-          offCtx.drawImage(candyImg, W * 0.698 - candyW / 2, H * 0.640 - candyH / 2, candyW, candyH);
-
-          baseData = offCtx.getImageData(0, 0, W, H);
-          classifyMasks(baseData, W, H);
-          buildLeatherGrainMap(W, H);
+        .then(([donutImg, candyImg, heartImg]) => {
+          charmImages.donut = donutImg;
+          charmImages.candy = candyImg;
+          charmImages.heart = heartImg;
+          composeBase();
           imageReady = true;
           loadingEl.style.display = "none";
           render();
