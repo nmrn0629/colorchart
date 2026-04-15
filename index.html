@@ -289,7 +289,6 @@
         <div>
           <h1>配色プレビュー</h1>
         </div>
-        <span class="tag">ベース: ドーナツ2</span>
       </div>
       <div class="canvas-wrap">
         <canvas id="previewCanvas" width="1024" height="1536"></canvas>
@@ -379,38 +378,38 @@
       donut: {
         label: "ドーナツ",
         image: "ドーナツ透過.png",
-        widthFrac: 0.34,
-        mask: { kind: "donut", seedDX: 0.102, seedY: 0.620 },
+        widthFrac: 0.442,
+        mask: { kind: "donut", seedDX: 0.1326, seedY: 0.620 },
         stitch: {
           kind: "radial",
           centerDX: 0, centerY: 0.620,
-          rx: 0.172, ry: 0.154,
+          rx: 0.2236, ry: 0.2002,
           outerR: 0.875, outerTol: 0.048, outerTolRelax: 0.058,
           innerR: 0.440, innerTol: 0.040, innerTolRelax: 0.050,
-          window: { dx: [-0.192, 0.208], y: [0.46, 0.79] },
+          window: { dx: [-0.2496, 0.2704], y: [0.412, 0.841] },
           minCount: 120
         }
       },
       candy: {
         label: "キャンディ",
         image: "キャンディ透過.png",
-        widthFrac: 0.28,
+        widthFrac: 0.364,
         mask: { kind: "candy", seedDX: 0, seedY: 0.640 },
         stitch: {
           kind: "candy",
-          tRange: [0.45, 0.83],
-          window: { dx: [-0.098, 0.102], y: [0.45, 0.83] },
+          tRange: [0.393, 0.887],
+          window: { dx: [-0.1274, 0.1326], y: [0.393, 0.887] },
           minCount: 80
         }
       },
       heart: {
         label: "ハート",
         image: "ハート透過.png",
-        widthFrac: 0.30,
+        widthFrac: 0.390,
         mask: { kind: "heart", seedDX: 0, seedY: 0.660 },
         stitch: {
           kind: "heart",
-          window: { dx: [-0.14, 0.14], y: [0.48, 0.78] },
+          window: { dx: [-0.182, 0.182], y: [0.414, 0.846] },
           insetPasses: 4,
           maxBandPasses: 8,
           minCount: 100
@@ -434,7 +433,7 @@
       metal: "silver",
       stitch: "white"
     };
-    const SLOT_CENTER_X = [0.332, 0.698];
+    const SLOT_CENTER_X = [0.275, 0.755];
     const SLOT_CENTER_Y = 0.640;
 
     const canvas = document.getElementById("previewCanvas");
@@ -819,12 +818,12 @@
     }
 
     function candyHalfWidthByT(t) {
-      if (t < 0.12) return lerp(0.028, 0.102, t / 0.12);
-      if (t < 0.28) return lerp(0.102, 0.058, (t - 0.12) / 0.16);
-      if (t < 0.50) return lerp(0.058, 0.094, (t - 0.28) / 0.22);
-      if (t < 0.72) return lerp(0.094, 0.058, (t - 0.50) / 0.22);
-      if (t < 0.88) return lerp(0.058, 0.102, (t - 0.72) / 0.16);
-      return lerp(0.102, 0.028, (t - 0.88) / 0.12);
+      if (t < 0.12) return lerp(0.0364, 0.1326, t / 0.12);
+      if (t < 0.28) return lerp(0.1326, 0.0754, (t - 0.12) / 0.16);
+      if (t < 0.50) return lerp(0.0754, 0.1222, (t - 0.28) / 0.22);
+      if (t < 0.72) return lerp(0.1222, 0.0754, (t - 0.50) / 0.22);
+      if (t < 0.88) return lerp(0.0754, 0.1326, (t - 0.72) / 0.16);
+      return lerp(0.1326, 0.0364, (t - 0.88) / 0.12);
     }
 
     function buildLineBarrier(src, width, height) {
