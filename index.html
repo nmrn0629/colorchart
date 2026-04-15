@@ -323,6 +323,13 @@
         </div>
       </div>
 
+      <div class="block">
+        <h2>ステッチ</h2>
+        <div class="metal-options">
+          <button id="stitchToggle" class="metal-btn" type="button">ステッチを黒に</button>
+        </div>
+      </div>
+
       <div class="summary-wrap">
         <button id="copySummary" class="summary-copy-btn" type="button">コピー</button>
         <p id="summary" class="summary"></p>
@@ -369,7 +376,8 @@
       boneColor: COLORS.find((c) => c.name === "ライムイエロー") || COLORS[0],
       dogGroup: "すべて",
       boneGroup: "すべて",
-      metal: "silver"
+      metal: "silver",
+      stitch: "white"
     };
 
     const canvas = document.getElementById("previewCanvas");
@@ -384,6 +392,7 @@
     const boneSwatchesEl = document.getElementById("boneSwatches");
     const metalSilverBtn = document.getElementById("metalSilver");
     const metalGoldBtn = document.getElementById("metalGold");
+    const stitchToggleBtn = document.getElementById("stitchToggle");
 
     const offscreen = document.createElement("canvas");
     const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -399,6 +408,8 @@
     let metalMask = null;
     let stitchDogMask = null;
     let stitchBoneMask = null;
+    let stitchBlackMask = null;
+    let outlineMask = null;
     let grainPatchData = null;
     let grainPatchWidth = 0;
     let grainPatchHeight = 0;
@@ -475,8 +486,9 @@
 
     function updateSummary() {
       const metalName = state.metal === "silver" ? "シルバー" : "ゴールド";
+      const stitchName = state.stitch === "white" ? "白" : "黒";
       summaryEl.textContent =
-        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」。`;
+        `現在の組み合わせ: ドーナツ「${state.dogColor.name}」 / キャンディ「${state.boneColor.name}」 / 金具「${metalName}」 / ステッチ「${stitchName}」。`;
     }
 
     async function copySummaryText() {
@@ -731,6 +743,8 @@
       metalMask = new Uint8Array(width * height);
       stitchDogMask = new Uint8Array(width * height);
       stitchBoneMask = new Uint8Array(width * height);
+      stitchBlackMask = new Uint8Array(width * height);
+      outlineMask = new Uint8Array(width * height);
       let dogCount = 0;
       let boneCount = 0;
 
@@ -1156,8 +1170,86 @@
         }
       }
 
+      const R = 6;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+          if (stitchDogMask[idx] || stitchBoneMask[idx]) continue;
+          const i = idx * 4;
+          if (src[i + 3] < 32) continue;
+          const lum = 0.2126 * src[i] + 0.7152 * src[i + 1] + 0.0722 * src[i + 2];
+          if (lum >= 170) continue;
+
+          let dogUp = false, dogDown = false, dogLeft = false, dogRight = false;
+          let boneUp = false, boneDown = false, boneLeft = false, boneRight = false;
+          for (let d = 1; d <= R; d += 1) {
+            if (!dogUp && y - d >= 0 && dogMask[(y - d) * width + x]) dogUp = true;
+            if (!dogDown && y + d < height && dogMask[(y + d) * width + x]) dogDown = true;
+            if (!dogLeft && x - d >= 0 && dogMask[y * width + (x - d)]) dogLeft = true;
+            if (!dogRight && x + d < width && dogMask[y * width + (x + d)]) dogRight = true;
+            if (!boneUp && y - d >= 0 && boneMask[(y - d) * width + x]) boneUp = true;
+            if (!boneDown && y + d < height && boneMask[(y + d) * width + x]) boneDown = true;
+            if (!boneLeft && x - d >= 0 && boneMask[y * width + (x - d)]) boneLeft = true;
+            if (!boneRight && x + d < width && boneMask[y * width + (x + d)]) boneRight = true;
+          }
+          if ((dogUp && dogDown) || (dogLeft && dogRight)) {
+            stitchDogMask[idx] = 1;
+          } else if ((boneUp && boneDown) || (boneLeft && boneRight)) {
+            stitchBoneMask[idx] = 1;
+          }
+        }
+      }
+
       removeIsolatedStitchPixels(stitchDogMask, width, height);
       removeIsolatedStitchPixels(stitchBoneMask, width, height);
+
+      stitchBlackMask.fill(0);
+      for (let idx = 0; idx < stitchBlackMask.length; idx += 1) {
+        if (stitchDogMask[idx] || stitchBoneMask[idx]) stitchBlackMask[idx] = 1;
+      }
+      outlineMask.fill(0);
+      const OR = 3;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+          if (stitchDogMask[idx] || stitchBoneMask[idx]) continue;
+          if (dogMask[idx] || boneMask[idx] || metalMask[idx]) continue;
+          const i = idx * 4;
+          if (src[i + 3] < 16) continue;
+          const lum = 0.2126 * src[i] + 0.7152 * src[i + 1] + 0.0722 * src[i + 2];
+          if (lum >= 200) continue;
+          let hasNeighbor = false;
+          for (let d = 1; d <= OR && !hasNeighbor; d += 1) {
+            if (y - d >= 0 && (dogMask[(y - d) * width + x] || boneMask[(y - d) * width + x])) hasNeighbor = true;
+            else if (y + d < height && (dogMask[(y + d) * width + x] || boneMask[(y + d) * width + x])) hasNeighbor = true;
+            else if (x - d >= 0 && (dogMask[y * width + (x - d)] || boneMask[y * width + (x - d)])) hasNeighbor = true;
+            else if (x + d < width && (dogMask[y * width + (x + d)] || boneMask[y * width + (x + d)])) hasNeighbor = true;
+          }
+          if (hasNeighbor) outlineMask[idx] = 1;
+        }
+      }
+
+      for (let pass = 0; pass < 3; pass += 1) {
+        const prev = stitchBlackMask.slice();
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const idx = y * width + x;
+            if (!prev[idx]) continue;
+            const neighbors = [
+              x > 0 ? idx - 1 : -1,
+              x < width - 1 ? idx + 1 : -1,
+              y > 0 ? idx - width : -1,
+              y < height - 1 ? idx + width : -1
+            ];
+            for (const n of neighbors) {
+              if (n < 0 || stitchBlackMask[n]) continue;
+              const ni = n * 4;
+              const nlum = 0.2126 * src[ni] + 0.7152 * src[ni + 1] + 0.0722 * src[ni + 2];
+              if (nlum < 240) stitchBlackMask[n] = 1;
+            }
+          }
+        }
+      }
     }
 
     function removeIsolatedStitchPixels(mask, width, height) {
@@ -1297,14 +1389,22 @@
           result = metalTone(base, state.metal);
         }
 
-        if (stitchDogMask[idx] || stitchBoneMask[idx]) {
-          result = stitchPixelTone(base);
+        let alphaOut = src[i + 3];
+        const inStitch = stitchBlackMask[idx];
+        if (inStitch) {
+          result = state.stitch === "white"
+            ? { r: 245, g: 245, b: 244 }
+            : { r: 18, g: 18, b: 20 };
+          if (alphaOut > 0) alphaOut = 255;
+        } else if (outlineMask[idx]) {
+          result = { r: 18, g: 18, b: 20 };
+          alphaOut = 255;
         }
 
         dst[i] = result.r;
         dst[i + 1] = result.g;
         dst[i + 2] = result.b;
-        dst[i + 3] = src[i + 3];
+        dst[i + 3] = alphaOut;
       }
 
       ctx.putImageData(out, 0, 0);
@@ -1359,6 +1459,14 @@
         render();
       });
 
+      stitchToggleBtn.addEventListener("click", () => {
+        state.stitch = state.stitch === "white" ? "black" : "white";
+        stitchToggleBtn.textContent = state.stitch === "white" ? "ステッチを黒に" : "ステッチを白に";
+        stitchToggleBtn.classList.toggle("active", state.stitch === "black");
+        updateSummary();
+        render();
+      });
+
       copySummaryBtn.addEventListener("click", () => {
         copySummaryText();
       });
@@ -1393,7 +1501,7 @@
 
           const donutW = W * 0.34;
           const donutH = donutImg.naturalHeight * (donutW / donutImg.naturalWidth);
-          offCtx.drawImage(donutImg, W * 0.332 - donutW / 2, H * 0.620 - donutH / 2, donutW, donutH);
+          offCtx.drawImage(donutImg, W * 0.332 - donutW / 2, H * 0.640 - donutH / 2, donutW, donutH);
 
           const candyW = W * 0.28;
           const candyH = candyImg.naturalHeight * (candyW / candyImg.naturalWidth);
