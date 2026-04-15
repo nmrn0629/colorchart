@@ -27,10 +27,7 @@
       min-height: 100vh;
       font-family: "M PLUS Rounded 1c", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(130% 75% at 10% 0%, rgba(255, 221, 171, 0.58), transparent 65%),
-        radial-gradient(120% 90% at 100% 15%, rgba(171, 213, 227, 0.44), transparent 60%),
-        linear-gradient(135deg, #eee5d6 0%, #f7f4ee 42%, #e9f0f3 100%);
+      background: url("大理石背景.png") center center / cover no-repeat fixed, #f2ede4;
       padding: 24px;
     }
 
@@ -336,13 +333,6 @@
         </div>
       </div>
 
-      <div class="block">
-        <h2>配置</h2>
-        <div class="metal-options">
-          <button id="swapCharms" class="metal-btn" type="button">左右を入れ替え</button>
-        </div>
-      </div>
-
       <div class="summary-wrap">
         <button id="copySummary" class="summary-copy-btn" type="button">コピー</button>
         <p id="summary" class="summary"></p>
@@ -460,7 +450,6 @@
     const metalSilverBtn = document.getElementById("metalSilver");
     const metalGoldBtn = document.getElementById("metalGold");
     const stitchToggleBtn = document.getElementById("stitchToggle");
-    const swapCharmsBtn = document.getElementById("swapCharms");
 
     const offscreen = document.createElement("canvas");
     const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -1579,19 +1568,6 @@ function isStitchLikePixel(src, width, height, x, y, relaxed = false) {
         state.stitch = state.stitch === "white" ? "black" : "white";
         stitchToggleBtn.textContent = state.stitch === "white" ? "ステッチを黒に" : "ステッチを白に";
         stitchToggleBtn.classList.toggle("active", state.stitch === "black");
-        updateSummary();
-        render();
-      });
-
-      swapCharmsBtn.addEventListener("click", () => {
-        if (!imageReady) return;
-        state.slots = [state.slots[1], state.slots[0]];
-        for (let s = 0; s < 2; s += 1) {
-          slotGroupEls[s].value = state.slots[s].group;
-        }
-        refreshTypeButtons();
-        rerenderSwatches();
-        composeBase();
         updateSummary();
         render();
       });
